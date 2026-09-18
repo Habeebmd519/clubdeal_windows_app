@@ -20,13 +20,15 @@ jobs:
         run: flutter config --enable-windows-desktop
 
       - name: Get dependencies
+        working-directory: clubdeal
         run: flutter pub get
 
       - name: Build Windows
+        working-directory: clubdeal
         run: flutter build windows --release
 
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
         with:
           name: clubdeal-windows
-          path: build/windows/x64/runner/Release/
+          path: clubdeal/build/windows/x64/runner/Release/
