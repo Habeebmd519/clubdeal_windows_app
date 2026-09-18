@@ -10,11 +10,7 @@ class OrderState {
   final bool loading;
   final String? error;
 
-  const OrderState({
-    this.orders = const [],
-    this.loading = true,
-    this.error,
-  });
+  const OrderState({this.orders = const [], this.loading = true, this.error});
 
   OrderState copyWith({
     List<RestaurantOrder>? orders,
@@ -52,37 +48,31 @@ class OrderBloc extends Bloc<OrderEvent, OrderState> {
     on<OrderStatusChanged>(_changeStatus);
     on<_OrdersArrived>(_ordersArrived);
     on<_OrdersFailed>(
-      (event, emit) => emit(state.copyWith(
-        loading: false,
-        error: event.message,
-      )),
+      (event, emit) =>
+          emit(state.copyWith(loading: false, error: event.message)),
     );
   }
 
-  Future<void> _start(
-    OrdersStarted event,
-    Emitter<OrderState> emit,
-  ) async {
+  Future<void> _start(OrdersStarted event, Emitter<OrderState> emit) async {
     emit(state.copyWith(loading: true, error: null));
     await _subscription?.cancel();
 
     _subscription = repository.watchOrders().listen(
-      (orders) => add(_OrdersArrived(orders)),
+      (orders) {
+        print('🔥 OrderBloc received ${orders.length} orders');
+        add(_OrdersArrived(orders));
+      },
       onError: (Object error, StackTrace stack) {
+        print('❌ FIRESTORE ERROR: $error');
+        print(stack);
+
         add(_OrdersFailed(error.toString()));
       },
     );
   }
 
-  void _ordersArrived(
-    _OrdersArrived event,
-    Emitter<OrderState> emit,
-  ) {
-    emit(OrderState(
-      orders: event.orders,
-      loading: false,
-      error: null,
-    ));
+  void _ordersArrived(_OrdersArrived event, Emitter<OrderState> emit) {
+    emit(OrderState(orders: event.orders, loading: false, error: null));
   }
 
   Future<void> _changeStatus(
@@ -90,10 +80,7 @@ class OrderBloc extends Bloc<OrderEvent, OrderState> {
     Emitter<OrderState> emit,
   ) async {
     try {
-      await repository.updateOrderStatus(
-        event.orderId,
-        event.status,
-      );
+      await repository.updateOrderStatus(event.orderId, event.status);
     } catch (e) {
       emit(state.copyWith(error: 'Could not update order: $e'));
     }

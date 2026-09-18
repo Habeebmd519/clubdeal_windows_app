@@ -17,6 +17,14 @@ class RestaurantRepository {
 
   Stream<List<RestaurantOrder>> watchOrders() {
     return _orders.snapshots().map((snapshot) {
+      print('🔥 Firestore orders snapshot received');
+      print('🔥 Number of orders: ${snapshot.docs.length}');
+
+      for (final doc in snapshot.docs) {
+        print('🔥 ORDER ID: ${doc.id}');
+        print('🔥 ORDER DATA: ${doc.data()}');
+      }
+
       final orders = snapshot.docs.map(RestaurantOrder.fromDocument).toList();
 
       orders.sort((a, b) {
