@@ -48,13 +48,7 @@ Future<void> main() async {
       .collection('menu2')
       .get(const GetOptions(source: Source.server));
 
-  print('🔥 SERVER MENU2 TEST');
-  print('🔥 Menu2 documents: ${menuTest.docs.length}');
-
-  for (final doc in menuTest.docs) {
-    print('🔥 MENU2: ${doc.id}');
-    print('🔥 DATA: ${doc.data()}');
-  }
+  for (final doc in menuTest.docs) {}
   final repository = RestaurantRepository();
 
   runApp(
