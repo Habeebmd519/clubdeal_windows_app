@@ -50,24 +50,25 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     on<SoundPreviewRequested>((event, emit) => service.playPreview());
     on<SoundsToggled>((event, emit) {
       service.setEnabled(event.enabled);
-      emit(SettingsState(
-        usingDefaultSound: state.usingDefaultSound,
-        customSoundPath: state.customSoundPath,
-        soundsEnabled: event.enabled,
-      ));
+      emit(
+        SettingsState(
+          usingDefaultSound: state.usingDefaultSound,
+          customSoundPath: state.customSoundPath,
+          soundsEnabled: event.enabled,
+        ),
+      );
     });
   }
 
-  Future<void> _load(
-    SettingsStarted event,
-    Emitter<SettingsState> emit,
-  ) async {
+  Future<void> _load(SettingsStarted event, Emitter<SettingsState> emit) async {
     final path = await service.customSound();
-    emit(SettingsState(
-      usingDefaultSound: path == null,
-      customSoundPath: path,
-      soundsEnabled: service.enabled,
-    ));
+    emit(
+      SettingsState(
+        usingDefaultSound: path == null,
+        customSoundPath: path,
+        soundsEnabled: service.enabled,
+      ),
+    );
   }
 
   Future<void> _select(
@@ -75,11 +76,13 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     Emitter<SettingsState> emit,
   ) async {
     await service.saveCustomSound(event.path);
-    emit(SettingsState(
-      usingDefaultSound: false,
-      customSoundPath: event.path,
-      soundsEnabled: state.soundsEnabled,
-    ));
+    emit(
+      SettingsState(
+        usingDefaultSound: false,
+        customSoundPath: event.path,
+        soundsEnabled: state.soundsEnabled,
+      ),
+    );
   }
 
   Future<void> _restore(
@@ -87,9 +90,11 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     Emitter<SettingsState> emit,
   ) async {
     await service.reset();
-    emit(SettingsState(
-      usingDefaultSound: true,
-      soundsEnabled: state.soundsEnabled,
-    ));
+    emit(
+      SettingsState(
+        usingDefaultSound: true,
+        soundsEnabled: state.soundsEnabled,
+      ),
+    );
   }
 }
