@@ -37,19 +37,12 @@ Future<void> main() async {
       child: MultiBlocProvider(
         providers: [
           BlocProvider(create: (_) => AppBloc()),
-          BlocProvider(
-            create: (_) =>
-                OrderBloc(restaurantRepository)..add(const OrdersStarted()),
-          ),
-          BlocProvider(
-            create: (_) =>
-                MenuBloc(restaurantRepository)..add(const MenuStarted()),
-          ),
+          BlocProvider(create: (context) => OrderBloc(restaurantRepository, printerService: context.read<PrinterService>(), alertSoundService: context.read<AlertSoundService>())..add(const OrdersStarted())),
+          BlocProvider(create: (_) => MenuBloc(restaurantRepository)..add(const MenuStarted())),
           BlocProvider(create: (_) => ExpenseBloc(expenseRepository)),
           BlocProvider(
-            create: (context) =>
-                SettingsBloc(context.read<AlertSoundService>())
-                  ..add(const SettingsStarted()),
+            create: (context) => SettingsBloc(context.read<AlertSoundService>())
+              ..add(const SettingsStarted()),
           ),
         ],
         child: const ClubDealDesktopApp(),

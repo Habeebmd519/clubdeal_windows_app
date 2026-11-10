@@ -101,46 +101,91 @@ class SettingsPage extends StatelessWidget {
             const SizedBox(height: 14),
             _Section(
               title: 'Printer',
-              child: Builder(
-                builder: (context) {
+              child: AnimatedBuilder(
+                animation: context.read<PrinterService>(),
+                builder: (context, _) {
                   final printer = context.read<PrinterService>();
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Windows printer integration is intentionally isolated '
-                        'from the UI. Do not use the Android Bluetooth printer '
-                        'package in the desktop build.',
+                        'Select the printer installed in Windows. Connect the POS58 by USB and install its Windows driver first.',
                         style: TextStyle(color: AppColors.cream2, fontSize: 12),
                       ),
                       const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Automatically print new orders'),
+                        subtitle: const Text('Print each order that arrives after this app starts listening. Existing order history is not reprinted.'),
+                        value: printer.autoPrintNewOrders,
+                        onChanged: printer.setAutoPrintNewOrders,
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
                         children: [
-                          OutlinedButton.icon(
-                            onPressed: () async {
-                              try {
-                                await printer.testPrint();
-                              } catch (e) {
-                                if (!context.mounted) return;
-                                ScaffoldMessenger.of(
-                                  context,
-                                ).showSnackBar(SnackBar(content: Text('$e')));
-                              }
-                            },
-                            icon: const Icon(Icons.print_outlined, size: 17),
-                            label: const Text('Test Printer'),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              value: printer.printers.any((p) => p.name == printer.selectedPrinterName)
+                                  ? printer.selectedPrinterName
+                                  : null,
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Windows printer',
+                                prefixIcon: Icon(Icons.print_outlined),
+                              ),
+                              hint: Text(printer.printers.isEmpty ? 'No printers found' : 'Select printer'),
+                              items: printer.printers.map((p) => DropdownMenuItem<String>(
+                                value: p.name,
+                                child: Text(p.isDefault ? '${p.name} (Default)' : p.name,
+                                    overflow: TextOverflow.ellipsis),
+                              )).toList(),
+                              onChanged: printer.selectPrinter,
+                            ),
                           ),
-                          StatusPill(
-                            text: printer.isConnected
-                                ? 'CONNECTED'
-                                : 'NOT CONFIGURED',
-                            color: printer.isConnected
-                                ? AppColors.success
-                                : AppColors.warning,
+                          const SizedBox(width: 8),
+                          OutlinedButton.icon(
+                            onPressed: printer.isLoading ? null : printer.refreshPrinters,
+                            icon: const Icon(Icons.refresh, size: 17),
+                            label: const Text('Refresh'),
                           ),
                         ],
                       ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          FilledButton.icon(
+                            onPressed: !printer.isConnected || printer.isLoading
+                                ? null
+                                : () async {
+                                    try {
+                                      await printer.testPrint();
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Test receipt sent to Windows print queue.')),
+                                      );
+                                    } catch (e) {
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Test print failed: $e')),
+                                      );
+                                    }
+                                  },
+                            icon: const Icon(Icons.print, size: 17),
+                            label: const Text('Test Print'),
+                          ),
+                          StatusPill(
+                            text: printer.isConnected ? 'READY' : 'NOT CONNECTED',
+                            color: printer.isConnected ? AppColors.success : AppColors.warning,
+                          ),
+                        ],
+                      ),
+                      if (printer.lastError != null) ...[
+                        const SizedBox(height: 8),
+                        Text(printer.lastError!,
+                            style: const TextStyle(color: AppColors.warning, fontSize: 11)),
+                      ],
                     ],
                   );
                 },

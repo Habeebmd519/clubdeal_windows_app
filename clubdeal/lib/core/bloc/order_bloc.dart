@@ -4,6 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../models/order_model.dart';
 import '../repositories/restaurant_repository.dart';
+import '../services/printer_service.dart';
+import '../services/alert_sound_service.dart';
 
 class OrderState {
   final List<RestaurantOrder> orders;
@@ -42,8 +44,12 @@ class OrderStatusChanged extends OrderEvent {
 class OrderBloc extends Bloc<OrderEvent, OrderState> {
   final RestaurantRepository repository;
   StreamSubscription<List<RestaurantOrder>>? _subscription;
+  final PrinterService? printerService;
+  final AlertSoundService? alertSoundService;
+  bool _receivedInitialSnapshot = false;
+  final Set<String> _knownOrderIds = {};
 
-  OrderBloc(this.repository) : super(const OrderState()) {
+  OrderBloc(this.repository, {this.printerService, this.alertSoundService}) : super(const OrderState()) {
     on<OrdersStarted>(_start);
     on<OrderStatusChanged>(_changeStatus);
     on<_OrdersArrived>(_ordersArrived);
@@ -72,7 +78,30 @@ class OrderBloc extends Bloc<OrderEvent, OrderState> {
   }
 
   void _ordersArrived(_OrdersArrived event, Emitter<OrderState> emit) {
-    emit(OrderState(orders: event.orders, loading: false, error: null));
+    final incoming = event.orders;
+    if (_receivedInitialSnapshot) {
+      final newlyCreated = incoming
+          .where((order) => !_knownOrderIds.contains(order.id))
+          .toList();
+      final printer = printerService;
+      if (newlyCreated.isNotEmpty) {
+        unawaited(alertSoundService?.playNewOrder() ?? Future<void>.value());
+      }
+      if (printer != null && printer.autoPrintNewOrders) {
+        for (final order in newlyCreated) {
+          // Do not block Firestore state updates while the Windows spooler runs.
+          printer.printOrder(order).catchError((Object error) {
+            print('Automatic receipt print failed for ${order.id}: $error');
+          });
+        }
+      }
+    } else {
+      _receivedInitialSnapshot = true;
+    }
+    _knownOrderIds
+      ..clear()
+      ..addAll(incoming.map((order) => order.id));
+    emit(OrderState(orders: incoming, loading: false, error: null));
   }
 
   Future<void> _changeStatus(
