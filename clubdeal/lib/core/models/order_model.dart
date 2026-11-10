@@ -43,12 +43,12 @@ class OrderItem {
   }
 
   Map<String, dynamic> toMap() => {
-        'name': name,
-        'qty': qty,
-        'price': price,
-        'emoji': emoji,
-        'cat': category,
-      };
+    'name': name,
+    'qty': qty,
+    'price': price,
+    'emoji': emoji,
+    'cat': category,
+  };
 }
 
 class RestaurantOrder {
@@ -84,11 +84,9 @@ class RestaurantOrder {
 
     final items = rawItems is List
         ? rawItems
-            .whereType<Map>()
-            .map((item) => OrderItem.fromMap(
-                  Map<String, dynamic>.from(item),
-                ))
-            .toList()
+              .whereType<Map>()
+              .map((item) => OrderItem.fromMap(Map<String, dynamic>.from(item)))
+              .toList()
         : <OrderItem>[];
 
     final timestamp = data['createdAt'];

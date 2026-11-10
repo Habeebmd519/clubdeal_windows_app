@@ -9,6 +9,8 @@ class MenuItemModel {
   final String emoji;
   final String tag;
   final bool isAvailable;
+  final double chickenGrams;
+  final double friesGrams;
 
   const MenuItemModel({
     required this.id,
@@ -19,6 +21,8 @@ class MenuItemModel {
     required this.emoji,
     required this.tag,
     required this.isAvailable,
+    this.chickenGrams = 0,
+    this.friesGrams = 0,
   });
 
   factory MenuItemModel.fromDocument(
@@ -26,6 +30,13 @@ class MenuItemModel {
   ) {
     final data = doc.data() ?? {};
     final price = data['price'];
+    final usage = data['ingredientUsage'];
+    final ingredientUsage = usage is Map
+        ? Map<String, dynamic>.from(usage)
+        : <String, dynamic>{};
+    final chicken =
+        ingredientUsage['chickenGrams'] ?? data['chickenGrams'] ?? 0;
+    final fries = ingredientUsage['friesGrams'] ?? data['friesGrams'] ?? 0;
 
     return MenuItemModel(
       id: doc.id,
@@ -36,6 +47,12 @@ class MenuItemModel {
       emoji: '${data['emoji'] ?? '🍽️'}',
       tag: '${data['tag'] ?? ''}',
       isAvailable: data['isAvailable'] != false,
+      chickenGrams: chicken is num
+          ? chicken.toDouble()
+          : double.tryParse('$chicken') ?? 0,
+      friesGrams: fries is num
+          ? fries.toDouble()
+          : double.tryParse('$fries') ?? 0,
     );
   }
 }

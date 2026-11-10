@@ -31,7 +31,9 @@ class Expense {
     id: id,
     title: map['title'] as String? ?? '',
     amount: (map['amount'] as num? ?? 0).toDouble(),
-    type: map['type'] == 'purchase' ? ExpenseType.purchase : ExpenseType.operating,
+    type: map['type'] == 'purchase'
+        ? ExpenseType.purchase
+        : ExpenseType.operating,
     createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     category: map['category'] as String? ?? 'General',
     ingredientId: map['ingredientId'] as String?,
@@ -41,10 +43,14 @@ class Expense {
   );
 
   Map<String, dynamic> toMap() => {
-    'title': title, 'amount': amount,
+    'title': title,
+    'amount': amount,
     'type': type == ExpenseType.purchase ? 'purchase' : 'operating',
     'createdAt': Timestamp.fromDate(createdAt),
-    'category': category, 'ingredientId': ingredientId,
-    'quantity': quantity, 'unit': unit, 'notes': notes,
+    'category': category,
+    'ingredientId': ingredientId,
+    'quantity': quantity,
+    'unit': unit,
+    'notes': notes,
   };
 }

@@ -86,6 +86,8 @@ class RestaurantRepository {
     required String emoji,
     required String tag,
     required bool isAvailable,
+    double chickenGrams = 0,
+    double friesGrams = 0,
   }) async {
     final doc = id == null ? _menu.doc() : _menu.doc(id);
 
@@ -97,6 +99,10 @@ class RestaurantRepository {
       'emoji': emoji.isEmpty ? '🍽️' : emoji,
       'tag': tag,
       'isAvailable': isAvailable,
+      'ingredientUsage': {
+        'chickenGrams': chickenGrams,
+        'friesGrams': friesGrams,
+      },
       'updatedAt': FieldValue.serverTimestamp(),
       if (id == null) 'createdAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));

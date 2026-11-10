@@ -1,28 +1,14 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-enum DesktopPage {
-  dashboard,
-  activeOrders,
-  allOrders,
-  menu,
-  expenses,
-  inventory,
-  settings,
-}
+enum DesktopPage { dashboard, activeOrders, allOrders, menu, settings }
 
 class AppState {
   final DesktopPage page;
   final bool compactMode;
 
-  const AppState({
-    this.page = DesktopPage.dashboard,
-    this.compactMode = false,
-  });
+  const AppState({this.page = DesktopPage.dashboard, this.compactMode = false});
 
-  AppState copyWith({
-    DesktopPage? page,
-    bool? compactMode,
-  }) {
+  AppState copyWith({DesktopPage? page, bool? compactMode}) {
     return AppState(
       page: page ?? this.page,
       compactMode: compactMode ?? this.compactMode,
@@ -46,9 +32,7 @@ class AppDensityChanged extends AppEvent {
 
 class AppBloc extends Bloc<AppEvent, AppState> {
   AppBloc() : super(const AppState()) {
-    on<AppPageChanged>(
-      (event, emit) => emit(state.copyWith(page: event.page)),
-    );
+    on<AppPageChanged>((event, emit) => emit(state.copyWith(page: event.page)));
     on<AppDensityChanged>(
       (event, emit) => emit(state.copyWith(compactMode: event.compact)),
     );

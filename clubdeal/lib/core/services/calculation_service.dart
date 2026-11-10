@@ -6,13 +6,15 @@ class CalculationService {
     var total = 0.0;
     for (final line in recipe.lines) {
       final ingredient = ingredients[line.ingredientId];
-      if (ingredient != null) total += line.quantity * ingredient.averageUnitCost;
+      if (ingredient != null)
+        total += line.quantity * ingredient.averageUnitCost;
     }
     return total;
   }
 
   double netProfit({
-    required double sales, required double consumedIngredientCost,
+    required double sales,
+    required double consumedIngredientCost,
     required double operatingExpenses,
   }) => sales - consumedIngredientCost - operatingExpenses;
 }

@@ -6,7 +6,10 @@ class RecipeLine {
     ingredientId: m['ingredientId'] as String,
     quantity: (m['quantity'] as num).toDouble(),
   );
-  Map<String, dynamic> toMap() => {'ingredientId': ingredientId, 'quantity': quantity};
+  Map<String, dynamic> toMap() => {
+    'ingredientId': ingredientId,
+    'quantity': quantity,
+  };
 }
 
 class MenuRecipe {
@@ -16,7 +19,11 @@ class MenuRecipe {
   factory MenuRecipe.fromMap(String id, Map<String, dynamic> m) => MenuRecipe(
     menuItemId: id,
     lines: ((m['lines'] as List?) ?? const [])
-      .whereType<Map>().map((e) => RecipeLine.fromMap(Map<String, dynamic>.from(e))).toList(),
+        .whereType<Map>()
+        .map((e) => RecipeLine.fromMap(Map<String, dynamic>.from(e)))
+        .toList(),
   );
-  Map<String, dynamic> toMap() => {'lines': lines.map((e) => e.toMap()).toList()};
+  Map<String, dynamic> toMap() => {
+    'lines': lines.map((e) => e.toMap()).toList(),
+  };
 }

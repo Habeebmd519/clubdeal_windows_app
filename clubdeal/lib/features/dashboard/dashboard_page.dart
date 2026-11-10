@@ -16,14 +16,17 @@ class DashboardPage extends StatelessWidget {
     return BlocBuilder<OrderBloc, OrderState>(
       builder: (context, state) {
         final orders = state.orders;
-        final active = orders.where(
-          (o) => o.status != OrderStatus.delivered &&
-              o.status != OrderStatus.cancelled,
-        ).toList();
+        final active = orders
+            .where(
+              (o) =>
+                  o.status != OrderStatus.delivered &&
+                  o.status != OrderStatus.cancelled,
+            )
+            .toList();
 
-        final pending = orders.where(
-          (o) => o.status == OrderStatus.pending,
-        ).length;
+        final pending = orders
+            .where((o) => o.status == OrderStatus.pending)
+            .length;
 
         final revenue = orders.fold<double>(
           0,
@@ -82,10 +85,7 @@ class DashboardPage extends StatelessWidget {
                 ),
                 Text(
                   '${active.length} active',
-                  style: const TextStyle(
-                    color: AppColors.muted,
-                    fontSize: 11,
-                  ),
+                  style: const TextStyle(color: AppColors.muted, fontSize: 11),
                 ),
               ],
             ),
@@ -101,18 +101,20 @@ class DashboardPage extends StatelessWidget {
                 ),
               )
             else
-              ...active.take(8).map(
-                (order) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: OrderTile(order: order),
-                ),
-              ),
+              ...active
+                  .take(8)
+                  .map(
+                    (order) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: OrderTile(order: order),
+                    ),
+                  ),
             const SizedBox(height: 20),
             OutlinedButton.icon(
               onPressed: () {
                 context.read<AppBloc>().add(
-                      const AppPageChanged(DesktopPage.activeOrders),
-                    );
+                  const AppPageChanged(DesktopPage.activeOrders),
+                );
               },
               icon: const Icon(Icons.receipt_long_outlined, size: 17),
               label: const Text('Open Active Orders'),

@@ -58,10 +58,7 @@ class OrderTile extends StatelessWidget {
             flex: 3,
             child: Text(
               '${order.items.length} item(s)  •  ${DateFormat('hh:mm a').format(order.createdAt ?? DateTime.now())}',
-              style: const TextStyle(
-                color: AppColors.muted,
-                fontSize: 11,
-              ),
+              style: const TextStyle(color: AppColors.muted, fontSize: 11),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -87,8 +84,8 @@ class OrderTile extends StatelessWidget {
               tooltip: 'Mark ${next.name}',
               onPressed: () {
                 context.read<OrderBloc>().add(
-                      OrderStatusChanged(order.id, next),
-                    );
+                  OrderStatusChanged(order.id, next),
+                );
               },
               icon: const Icon(Icons.arrow_forward, size: 18),
             ),

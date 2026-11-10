@@ -34,10 +34,7 @@ class PageTitle extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 subtitle,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.muted,
-                ),
+                style: const TextStyle(fontSize: 12, color: AppColors.muted),
               ),
             ],
           ),
@@ -88,10 +85,7 @@ class MetricCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   label,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.muted,
-                  ),
+                  style: const TextStyle(fontSize: 11, color: AppColors.muted),
                 ),
               ],
             ),
@@ -106,11 +100,7 @@ class StatusPill extends StatelessWidget {
   final String text;
   final Color color;
 
-  const StatusPill({
-    super.key,
-    required this.text,
-    required this.color,
-  });
+  const StatusPill({super.key, required this.text, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -137,11 +127,7 @@ class EmptyPanel extends StatelessWidget {
   final String title;
   final String message;
 
-  const EmptyPanel({
-    super.key,
-    required this.title,
-    required this.message,
-  });
+  const EmptyPanel({super.key, required this.title, required this.message});
 
   @override
   Widget build(BuildContext context) {
@@ -149,11 +135,7 @@ class EmptyPanel extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.inbox_outlined,
-            size: 38,
-            color: AppColors.muted,
-          ),
+          const Icon(Icons.inbox_outlined, size: 38, color: AppColors.muted),
           const SizedBox(height: 10),
           Text(
             title,
@@ -165,10 +147,7 @@ class EmptyPanel extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             message,
-            style: const TextStyle(
-              color: AppColors.muted,
-              fontSize: 12,
-            ),
+            style: const TextStyle(color: AppColors.muted, fontSize: 12),
           ),
         ],
       ),
