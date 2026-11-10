@@ -9,6 +9,8 @@ import '../orders/orders_page.dart';
 import '../orders/all_orders_page.dart';
 import '../menu/menu_page.dart';
 import '../settings/settings_page.dart';
+import '../expenses/expense_page.dart';
+import '../inventory/inventory_page.dart';
 import '../theme/app_theme.dart';
 
 class DesktopShell extends StatelessWidget {
@@ -24,6 +26,8 @@ class DesktopShell extends StatelessWidget {
             SingleActivator(LogicalKeyboardKey.f2): AppPageIntent(DesktopPage.activeOrders),
             SingleActivator(LogicalKeyboardKey.f3): AppPageIntent(DesktopPage.allOrders),
             SingleActivator(LogicalKeyboardKey.f4): AppPageIntent(DesktopPage.menu),
+            SingleActivator(LogicalKeyboardKey.f5): AppPageIntent(DesktopPage.expenses),
+            SingleActivator(LogicalKeyboardKey.f6): AppPageIntent(DesktopPage.inventory),
             SingleActivator(LogicalKeyboardKey.f10): AppPageIntent(DesktopPage.settings),
           },
           child: Actions(
@@ -126,6 +130,20 @@ class _Sidebar extends StatelessWidget {
             selected: state.page == DesktopPage.menu,
             onTap: () => _go(context, DesktopPage.menu),
           ),
+          _NavItem(
+            icon: Icons.payments_outlined,
+            label: 'Expenses',
+            shortcut: 'F5',
+            selected: state.page == DesktopPage.expenses,
+            onTap: () => _go(context, DesktopPage.expenses),
+          ),
+          _NavItem(
+            icon: Icons.inventory_2_outlined,
+            label: 'Inventory',
+            shortcut: 'F6',
+            selected: state.page == DesktopPage.inventory,
+            onTap: () => _go(context, DesktopPage.inventory),
+          ),
           const Spacer(),
           _NavItem(
             icon: Icons.settings_outlined,
@@ -213,6 +231,10 @@ class _PageBody extends StatelessWidget {
         return const AllOrdersPage();
       case DesktopPage.menu:
         return const MenuPage();
+      case DesktopPage.expenses:
+        return const ExpensePage();
+      case DesktopPage.inventory:
+        return const InventoryPage();
       case DesktopPage.settings:
         return const SettingsPage();
     }

@@ -6,6 +6,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'firebase_options.dart';
 import 'core/repositories/restaurant_repository.dart';
+import 'core/repositories/expense_repository.dart';
+import 'core/repositories/inventory_repository.dart';
+import 'core/bloc/expense_bloc.dart';
+import 'core/bloc/inventory_bloc.dart';
 import 'core/bloc/order_bloc.dart';
 import 'core/bloc/menu_bloc.dart';
 import 'core/bloc/settings_bloc.dart';
@@ -55,12 +59,26 @@ Future<void> main() async {
     MultiRepositoryProvider(
       providers: [
         RepositoryProvider.value(value: repository),
+        RepositoryProvider(
+          create: (_) => ExpenseRepository(FirebaseFirestore.instance),
+        ),
+        RepositoryProvider(
+          create: (_) => InventoryRepository(FirebaseFirestore.instance),
+        ),
         RepositoryProvider(create: (_) => AlertSoundService()),
         RepositoryProvider(create: (_) => PrinterService()),
       ],
       child: MultiBlocProvider(
         providers: [
           BlocProvider(create: (_) => AppBloc()),
+          BlocProvider(
+            create: (context) => ExpenseBloc(context.read<ExpenseRepository>()),
+          ),
+          BlocProvider(
+            create: (context) =>
+                InventoryBloc(context.read<InventoryRepository>())
+                  ..add(const WatchIngredients()),
+          ),
           BlocProvider(
             create: (_) => OrderBloc(repository)..add(const OrdersStarted()),
           ),

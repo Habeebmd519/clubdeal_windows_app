@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/bloc/expense_bloc.dart';
 import '../../core/utils/currency_utils.dart';
+import 'add_expense_page.dart';
 
 class ExpensePage extends StatefulWidget {
   const ExpensePage({super.key});
@@ -18,7 +19,21 @@ class _ExpensePageState extends State<ExpensePage> {
   }
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Expenses')),
+    appBar: AppBar(
+      title: const Text('Expenses'),
+      actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 16),
+          child: FilledButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AddExpensePage()),
+            ),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Add expense'),
+          ),
+        ),
+      ],
+    ),
     body: BlocBuilder<ExpenseBloc, ExpenseState>(
       builder: (context, state) {
         if (state.loading && state.items.isEmpty) return const Center(child: CircularProgressIndicator());

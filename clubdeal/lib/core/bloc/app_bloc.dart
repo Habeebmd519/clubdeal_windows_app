@@ -5,6 +5,8 @@ enum DesktopPage {
   activeOrders,
   allOrders,
   menu,
+  expenses,
+  inventory,
   settings,
 }
 
