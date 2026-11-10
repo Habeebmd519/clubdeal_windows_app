@@ -10,7 +10,11 @@ class MenuState {
   final bool loading;
   final String? error;
 
-  const MenuState({this.items = const [], this.loading = true, this.error});
+  const MenuState({
+    this.items = const [],
+    this.loading = true,
+    this.error,
+  });
 }
 
 abstract class MenuEvent {
@@ -44,18 +48,26 @@ class MenuBloc extends Bloc<MenuEvent, MenuState> {
   MenuBloc(this.repository) : super(const MenuState()) {
     on<MenuStarted>(_start);
     on<_MenuArrived>(
-      (event, emit) => emit(MenuState(items: event.items, loading: false)),
+      (event, emit) => emit(MenuState(
+        items: event.items,
+        loading: false,
+      )),
     );
     on<_MenuFailed>(
-      (event, emit) => emit(
-        MenuState(items: state.items, loading: false, error: event.message),
-      ),
+      (event, emit) => emit(MenuState(
+        items: state.items,
+        loading: false,
+        error: event.message,
+      )),
     );
     on<MenuAvailabilityChanged>(_availabilityChanged);
     on<MenuItemDeleted>(_delete);
   }
 
-  Future<void> _start(MenuStarted event, Emitter<MenuState> emit) async {
+  Future<void> _start(
+    MenuStarted event,
+    Emitter<MenuState> emit,
+  ) async {
     await _subscription?.cancel();
     _subscription = repository.watchMenu().listen(
       (items) => add(_MenuArrived(items)),
@@ -76,7 +88,10 @@ class MenuBloc extends Bloc<MenuEvent, MenuState> {
     }
   }
 
-  Future<void> _delete(MenuItemDeleted event, Emitter<MenuState> emit) async {
+  Future<void> _delete(
+    MenuItemDeleted event,
+    Emitter<MenuState> emit,
+  ) async {
     try {
       await repository.deleteMenuItem(event.id);
     } catch (e) {
@@ -85,7 +100,11 @@ class MenuBloc extends Bloc<MenuEvent, MenuState> {
   }
 
   MenuState stateForError(String message) {
-    return MenuState(items: state.items, loading: false, error: message);
+    return MenuState(
+      items: state.items,
+      loading: false,
+      error: message,
+    );
   }
 
   @override
@@ -94,6 +113,7 @@ class MenuBloc extends Bloc<MenuEvent, MenuState> {
     return super.close();
   }
 }
+
 
 class _MenuFailed extends MenuEvent {
   final String message;

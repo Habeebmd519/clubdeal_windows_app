@@ -26,22 +26,21 @@ class _OrdersPageState extends State<OrdersPage> {
       builder: (context, state) {
         final source = widget.activeOnly
             ? state.orders.where(
-                (o) =>
-                    o.status != OrderStatus.delivered &&
+                (o) => o.status != OrderStatus.delivered &&
                     o.status != OrderStatus.cancelled,
               )
             : state.orders;
 
         final orders = source.where((order) {
           final q = query.toLowerCase().trim();
-          final matchesQuery =
-              q.isEmpty ||
+          final matchesQuery = q.isEmpty ||
               order.customerName.toLowerCase().contains(q) ||
               order.id.toLowerCase().contains(q) ||
               order.phone.toLowerCase().contains(q) ||
               order.table.toLowerCase().contains(q);
 
-          final matchesStatus = filter == null || order.status == filter;
+          final matchesStatus =
+              filter == null || order.status == filter;
 
           return matchesQuery && matchesStatus;
         }).toList();
@@ -94,17 +93,17 @@ class _OrdersPageState extends State<OrdersPage> {
                 child: state.loading
                     ? const Center(child: CircularProgressIndicator())
                     : orders.isEmpty
-                    ? const EmptyPanel(
-                        title: 'No orders found',
-                        message: 'Try another search or filter.',
-                      )
-                    : ListView.builder(
-                        itemCount: orders.length,
-                        itemBuilder: (_, index) => Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: OrderTile(order: orders[index]),
-                        ),
-                      ),
+                        ? const EmptyPanel(
+                            title: 'No orders found',
+                            message: 'Try another search or filter.',
+                          )
+                        : ListView.builder(
+                            itemCount: orders.length,
+                            itemBuilder: (_, index) => Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: OrderTile(order: orders[index]),
+                            ),
+                          ),
               ),
             ],
           ),

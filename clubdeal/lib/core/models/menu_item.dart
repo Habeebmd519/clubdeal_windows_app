@@ -13,46 +13,29 @@ class MenuItemModel {
   final double friesGrams;
 
   const MenuItemModel({
-    required this.id,
-    required this.name,
-    required this.price,
-    required this.category,
-    required this.description,
-    required this.emoji,
-    required this.tag,
-    required this.isAvailable,
-    this.chickenGrams = 0,
-    this.friesGrams = 0,
+    required this.id, required this.name, required this.price,
+    required this.category, required this.description, required this.emoji,
+    required this.tag, required this.isAvailable,
+    this.chickenGrams = 0, this.friesGrams = 0,
   });
 
-  factory MenuItemModel.fromDocument(
-    DocumentSnapshot<Map<String, dynamic>> doc,
-  ) {
-    final data = doc.data() ?? {};
-    final price = data['price'];
-    final usage = data['ingredientUsage'];
-    final ingredientUsage = usage is Map
-        ? Map<String, dynamic>.from(usage)
+  factory MenuItemModel.fromDocument(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? <String, dynamic>{};
+    final usage = data['ingredientUsage'] is Map
+        ? Map<String, dynamic>.from(data['ingredientUsage'] as Map)
         : <String, dynamic>{};
-    final chicken =
-        ingredientUsage['chickenGrams'] ?? data['chickenGrams'] ?? 0;
-    final fries = ingredientUsage['friesGrams'] ?? data['friesGrams'] ?? 0;
-
+    double number(dynamic value) => value is num ? value.toDouble() : double.tryParse('$value') ?? 0;
     return MenuItemModel(
       id: doc.id,
       name: '${data['name'] ?? ''}',
-      price: price is num ? price.toDouble() : double.tryParse('$price') ?? 0,
+      price: number(data['price']),
       category: '${data['category'] ?? 'Other'}',
       description: '${data['description'] ?? ''}',
       emoji: '${data['emoji'] ?? '🍽️'}',
       tag: '${data['tag'] ?? ''}',
       isAvailable: data['isAvailable'] != false,
-      chickenGrams: chicken is num
-          ? chicken.toDouble()
-          : double.tryParse('$chicken') ?? 0,
-      friesGrams: fries is num
-          ? fries.toDouble()
-          : double.tryParse('$fries') ?? 0,
+      chickenGrams: number(usage['chickenGrams']),
+      friesGrams: number(usage['friesGrams']),
     );
   }
 }

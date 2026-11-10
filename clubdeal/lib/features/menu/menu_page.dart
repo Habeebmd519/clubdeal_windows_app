@@ -62,27 +62,31 @@ class _MenuPageState extends State<MenuPage> {
                 child: state.loading
                     ? const Center(child: CircularProgressIndicator())
                     : items.isEmpty
-                    ? const EmptyPanel(
-                        title: 'No menu items',
-                        message: 'Add your first item.',
-                      )
-                    : ListView.separated(
-                        itemCount: items.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 6),
-                        itemBuilder: (_, index) {
-                          final item = items[index];
-                          return _MenuRow(
-                            item: item,
-                            onEdit: () => _editItem(context, item),
-                            onDelete: () => _delete(context, item),
-                            onAvailability: (value) {
-                              context.read<MenuBloc>().add(
-                                MenuAvailabilityChanged(item.id, value),
+                        ? const EmptyPanel(
+                            title: 'No menu items',
+                            message: 'Add your first item.',
+                          )
+                        : ListView.separated(
+                            itemCount: items.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 6),
+                            itemBuilder: (_, index) {
+                              final item = items[index];
+                              return _MenuRow(
+                                item: item,
+                                onEdit: () => _editItem(context, item),
+                                onDelete: () => _delete(context, item),
+                                onAvailability: (value) {
+                                  context.read<MenuBloc>().add(
+                                        MenuAvailabilityChanged(
+                                          item.id,
+                                          value,
+                                        ),
+                                      );
+                                },
                               );
                             },
-                          );
-                        },
-                      ),
+                          ),
               ),
             ],
           ),
@@ -91,7 +95,10 @@ class _MenuPageState extends State<MenuPage> {
     );
   }
 
-  Future<void> _delete(BuildContext context, MenuItemModel item) async {
+  Future<void> _delete(
+    BuildContext context,
+    MenuItemModel item,
+  ) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -115,7 +122,10 @@ class _MenuPageState extends State<MenuPage> {
     }
   }
 
-  Future<void> _editItem(BuildContext context, [MenuItemModel? old]) async {
+  Future<void> _editItem(
+    BuildContext context, [
+    MenuItemModel? old,
+  ]) async {
     final name = TextEditingController(text: old?.name ?? '');
     final price = TextEditingController(
       text: old == null ? '' : old.price.toString(),
@@ -124,16 +134,8 @@ class _MenuPageState extends State<MenuPage> {
     final description = TextEditingController(text: old?.description ?? '');
     final emoji = TextEditingController(text: old?.emoji ?? '🍽️');
     final tag = TextEditingController(text: old?.tag ?? '');
-    final chickenGrams = TextEditingController(
-      text: (old?.chickenGrams ?? 0).toStringAsFixed(
-        (old?.chickenGrams ?? 0) % 1 == 0 ? 0 : 2,
-      ),
-    );
-    final friesGrams = TextEditingController(
-      text: (old?.friesGrams ?? 0).toStringAsFixed(
-        (old?.friesGrams ?? 0) % 1 == 0 ? 0 : 2,
-      ),
-    );
+    final chickenGrams = TextEditingController(text: (old?.chickenGrams ?? 0).toString());
+    final friesGrams = TextEditingController(text: (old?.friesGrams ?? 0).toString());
     bool available = old?.isAvailable ?? true;
 
     await showDialog<void>(
@@ -150,7 +152,9 @@ class _MenuPageState extends State<MenuPage> {
                     children: [
                       TextField(
                         controller: name,
-                        decoration: const InputDecoration(labelText: 'Name'),
+                        decoration: const InputDecoration(
+                          labelText: 'Name',
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Row(
@@ -160,8 +164,8 @@ class _MenuPageState extends State<MenuPage> {
                               controller: price,
                               keyboardType:
                                   const TextInputType.numberWithOptions(
-                                    decimal: true,
-                                  ),
+                                decimal: true,
+                              ),
                               decoration: const InputDecoration(
                                 labelText: 'Price',
                                 prefixText: '₹ ',
@@ -208,63 +212,26 @@ class _MenuPageState extends State<MenuPage> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 14),
-                      const Align(
+                      const SizedBox(height: 16),
+                      Align(
                         alignment: Alignment.centerLeft,
-                        child: Text(
-                          'Expenses / Ingredient Usage',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.cream,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'Enter the ingredient quantity used for one menu item.',
-                          style: TextStyle(
-                            color: AppColors.muted,
-                            fontSize: 11,
-                          ),
-                        ),
+                        child: Text('Expenses / Ingredient Usage',
+                          style: Theme.of(context).textTheme.titleMedium),
                       ),
                       const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: chickenGrams,
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                    decimal: true,
-                                  ),
-                              decoration: const InputDecoration(
-                                labelText: 'Chicken',
-                                suffixText: 'g',
-                                hintText: '0',
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: friesGrams,
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                    decimal: true,
-                                  ),
-                              decoration: const InputDecoration(
-                                labelText: 'Fries',
-                                suffixText: 'g',
-                                hintText: '0',
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                      Row(children: [
+                        Expanded(child: TextField(
+                          controller: chickenGrams,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(labelText: 'Chicken (grams)', hintText: '0'),
+                        )),
+                        const SizedBox(width: 10),
+                        Expanded(child: TextField(
+                          controller: friesGrams,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(labelText: 'Fries (grams)', hintText: '0'),
+                        )),
+                      ]),
                       const SizedBox(height: 8),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
@@ -286,43 +253,37 @@ class _MenuPageState extends State<MenuPage> {
                 FilledButton(
                   onPressed: () async {
                     final itemName = name.text.trim();
-                    final itemPrice = double.tryParse(price.text.trim()) ?? 0;
+                    final itemPrice =
+                        double.tryParse(price.text.trim()) ?? 0;
 
-                    final chickenValue = double.tryParse(
-                      chickenGrams.text.trim(),
-                    );
-                    final friesValue = double.tryParse(friesGrams.text.trim());
-
-                    if (itemName.isEmpty ||
-                        itemPrice <= 0 ||
-                        chickenValue == null ||
-                        friesValue == null ||
-                        chickenValue < 0 ||
-                        friesValue < 0) {
+                    final chicken = double.tryParse(chickenGrams.text.trim()) ?? -1;
+                    final fries = double.tryParse(friesGrams.text.trim()) ?? -1;
+                    if (itemName.isEmpty || itemPrice <= 0 || chicken < 0 || fries < 0) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text(
-                            'Enter a valid name, price and non-negative ingredient quantities.',
-                          ),
+                          content: Text('Enter a valid name and price.'),
                         ),
                       );
                       return;
                     }
 
-                    await context.read<MenuBloc>().repository.saveMenuItem(
-                      id: old?.id,
-                      name: itemName,
-                      price: itemPrice,
-                      category: category.text.trim().isEmpty
-                          ? 'Other'
-                          : category.text.trim(),
-                      description: description.text.trim(),
-                      emoji: emoji.text.trim(),
-                      tag: tag.text.trim(),
-                      isAvailable: available,
-                      chickenGrams: chickenValue,
-                      friesGrams: friesValue,
-                    );
+                    await context
+                        .read<MenuBloc>()
+                        .repository
+                        .saveMenuItem(
+                          id: old?.id,
+                          name: itemName,
+                          price: itemPrice,
+                          category: category.text.trim().isEmpty
+                              ? 'Other'
+                              : category.text.trim(),
+                          description: description.text.trim(),
+                          emoji: emoji.text.trim(),
+                          tag: tag.text.trim(),
+                          isAvailable: available,
+                          chickenGrams: chicken,
+                          friesGrams: fries,
+                        );
 
                     if (dialogContext.mounted) {
                       Navigator.pop(dialogContext);
@@ -374,7 +335,10 @@ class _MenuRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 45,
-            child: Text(item.emoji, style: const TextStyle(fontSize: 23)),
+            child: Text(
+              item.emoji,
+              style: const TextStyle(fontSize: 23),
+            ),
           ),
           Expanded(
             flex: 3,
@@ -389,7 +353,10 @@ class _MenuRow extends StatelessWidget {
           Expanded(
             child: Text(
               item.category,
-              style: const TextStyle(color: AppColors.muted, fontSize: 11),
+              style: const TextStyle(
+                color: AppColors.muted,
+                fontSize: 11,
+              ),
             ),
           ),
           SizedBox(
@@ -404,7 +371,10 @@ class _MenuRow extends StatelessWidget {
           ),
           SizedBox(
             width: 100,
-            child: Switch(value: item.isAvailable, onChanged: onAvailability),
+            child: Switch(
+              value: item.isAvailable,
+              onChanged: onAvailability,
+            ),
           ),
           IconButton(
             tooltip: 'Edit',

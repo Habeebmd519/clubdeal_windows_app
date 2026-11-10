@@ -90,7 +90,6 @@ class RestaurantRepository {
     double friesGrams = 0,
   }) async {
     final doc = id == null ? _menu.doc() : _menu.doc(id);
-
     await doc.set({
       'name': name,
       'price': price,
