@@ -177,7 +177,7 @@ try {
     await _printLines(name, lines);
   }
 
-  Future<void> printOrder(RestaurantOrder order) async {
+  Future<void> printOrder(RestaurantOrder order, {PaymentMethod? paymentMethod}) async {
     final name = selectedPrinterName;
     if (name == null || !isConnected) {
       throw StateError('Select an installed Windows printer in Settings.');
@@ -200,6 +200,8 @@ try {
       ),
       '------------------------------',
       'TOTAL: Rs.${order.total.toStringAsFixed(2)}',
+      if (paymentMethod != null) 'PAID BY: ${paymentMethod.name.toUpperCase()}',
+      if (order.paymentMethod != null && paymentMethod == null) 'PAID BY: ${order.paymentMethod!.name.toUpperCase()}',
       if (order.note.trim().isNotEmpty) 'Note: ${order.note}',
       '',
       'Thank you!',
