@@ -19,7 +19,7 @@ class SettingsPage extends StatelessWidget {
           children: [
             const PageTitle(
               title: 'Settings',
-              subtitle: 'Desktop terminal configuration',
+              subtitle: 'Desktop terminal configuration, version 0.1',
             ),
             const SizedBox(height: 20),
             _Section(
@@ -115,8 +115,12 @@ class SettingsPage extends StatelessWidget {
                       const SizedBox(height: 12),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: const Text('Automatically print kitchen tickets'),
-                        subtitle: const Text('Send a kitchen ticket when a new order arrives. Existing order history is not reprinted.'),
+                        title: const Text(
+                          'Automatically print kitchen tickets',
+                        ),
+                        subtitle: const Text(
+                          'Send a kitchen ticket when a new order arrives. Existing order history is not reprinted.',
+                        ),
                         value: printer.autoPrintNewOrders,
                         onChanged: printer.setAutoPrintNewOrders,
                       ),
@@ -125,7 +129,11 @@ class SettingsPage extends StatelessWidget {
                         children: [
                           Expanded(
                             child: DropdownButtonFormField<String>(
-                              value: printer.printers.any((p) => p.name == printer.selectedPrinterName)
+                              value:
+                                  printer.printers.any(
+                                    (p) =>
+                                        p.name == printer.selectedPrinterName,
+                                  )
                                   ? printer.selectedPrinterName
                                   : null,
                               isExpanded: true,
@@ -133,18 +141,32 @@ class SettingsPage extends StatelessWidget {
                                 labelText: 'Windows printer',
                                 prefixIcon: Icon(Icons.print_outlined),
                               ),
-                              hint: Text(printer.printers.isEmpty ? 'No printers found' : 'Select printer'),
-                              items: printer.printers.map((p) => DropdownMenuItem<String>(
-                                value: p.name,
-                                child: Text(p.isDefault ? '${p.name} (Default)' : p.name,
-                                    overflow: TextOverflow.ellipsis),
-                              )).toList(),
+                              hint: Text(
+                                printer.printers.isEmpty
+                                    ? 'No printers found'
+                                    : 'Select printer',
+                              ),
+                              items: printer.printers
+                                  .map(
+                                    (p) => DropdownMenuItem<String>(
+                                      value: p.name,
+                                      child: Text(
+                                        p.isDefault
+                                            ? '${p.name} (Default)'
+                                            : p.name,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
                               onChanged: printer.selectPrinter,
                             ),
                           ),
                           const SizedBox(width: 8),
                           OutlinedButton.icon(
-                            onPressed: printer.isLoading ? null : printer.refreshPrinters,
+                            onPressed: printer.isLoading
+                                ? null
+                                : printer.refreshPrinters,
                             icon: const Icon(Icons.refresh, size: 17),
                             label: const Text('Refresh'),
                           ),
@@ -162,29 +184,48 @@ class SettingsPage extends StatelessWidget {
                                     try {
                                       await printer.testPrint();
                                       if (!context.mounted) return;
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Test receipt sent to Windows print queue.')),
-                                      );
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Test receipt sent to Windows print queue.',
+                                              ),
+                                            ),
+                                          );
                                     } catch (e) {
                                       if (!context.mounted) return;
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('Test print failed: $e')),
-                                      );
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                'Test print failed: $e',
+                                              ),
+                                            ),
+                                          );
                                     }
                                   },
                             icon: const Icon(Icons.print, size: 17),
                             label: const Text('Test Print'),
                           ),
                           StatusPill(
-                            text: printer.isConnected ? 'READY' : 'NOT CONNECTED',
-                            color: printer.isConnected ? AppColors.success : AppColors.warning,
+                            text: printer.isConnected
+                                ? 'READY'
+                                : 'NOT CONNECTED',
+                            color: printer.isConnected
+                                ? AppColors.success
+                                : AppColors.warning,
                           ),
                         ],
                       ),
                       if (printer.lastError != null) ...[
                         const SizedBox(height: 8),
-                        Text(printer.lastError!,
-                            style: const TextStyle(color: AppColors.warning, fontSize: 11)),
+                        Text(
+                          printer.lastError!,
+                          style: const TextStyle(
+                            color: AppColors.warning,
+                            fontSize: 11,
+                          ),
+                        ),
                       ],
                     ],
                   );
