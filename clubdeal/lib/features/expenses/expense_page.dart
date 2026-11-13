@@ -46,6 +46,215 @@ class _ExpensePageState extends State<ExpensePage> {
 
   @override
   Widget build(BuildContext context) {
+    Future<void> _getHistory() async {
+      final items = context.read<ExpenseBloc>().state.items;
+
+      DateTime fromDate = DateTime(
+        DateTime.now().year,
+        DateTime.now().month,
+        1,
+      );
+      DateTime toDate = DateTime.now();
+
+      ExpenseType? selectedType;
+      String? selectedCategory;
+
+      final categories = items.map((e) => e.category).toSet().toList()..sort();
+
+      await showDialog(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) {
+            final filteredItems = items.where((expense) {
+              final date = DateTime(
+                expense.createdAt.year,
+                expense.createdAt.month,
+                expense.createdAt.day,
+              );
+
+              final start = DateTime(
+                fromDate.year,
+                fromDate.month,
+                fromDate.day,
+              );
+
+              final end = DateTime(toDate.year, toDate.month, toDate.day);
+
+              final matchesDate = !date.isBefore(start) && !date.isAfter(end);
+
+              final matchesType =
+                  selectedType == null || expense.type == selectedType;
+
+              final matchesCategory =
+                  selectedCategory == null ||
+                  expense.category == selectedCategory;
+
+              return matchesDate && matchesType && matchesCategory;
+            }).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+            final total = filteredItems.fold<double>(
+              0,
+              (sum, e) => sum + e.amount,
+            );
+
+            return AlertDialog(
+              title: const Text('Expense History'),
+              content: SizedBox(
+                width: 650,
+                height: 520,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 10,
+                      children: [
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.date_range),
+                          label: Text(
+                            '${DateFormat('dd MMM yyyy').format(fromDate)} - '
+                            '${DateFormat('dd MMM yyyy').format(toDate)}',
+                          ),
+                          onPressed: () async {
+                            final range = await showDateRangePicker(
+                              context: context,
+                              firstDate: DateTime(2000),
+                              lastDate: DateTime.now(),
+                              initialDateRange: DateTimeRange(
+                                start: fromDate,
+                                end: toDate,
+                              ),
+                            );
+
+                            if (range != null) {
+                              setDialogState(() {
+                                fromDate = range.start;
+                                toDate = range.end;
+                              });
+                            }
+                          },
+                        ),
+
+                        // Expense type filter
+                        DropdownButton<ExpenseType?>(
+                          value: selectedType,
+                          hint: const Text('All Types'),
+                          items: const [
+                            DropdownMenuItem(
+                              value: null,
+                              child: Text('All Types'),
+                            ),
+                            DropdownMenuItem(
+                              value: ExpenseType.purchase,
+                              child: Text('Purchase'),
+                            ),
+                            DropdownMenuItem(
+                              value: ExpenseType.operating,
+                              child: Text('Operating'),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            setDialogState(() {
+                              selectedType = value;
+                            });
+                          },
+                        ),
+
+                        // Category filter
+                        DropdownButton<String?>(
+                          value: selectedCategory,
+                          hint: const Text('All Categories'),
+                          items: [
+                            const DropdownMenuItem(
+                              value: null,
+                              child: Text('All Categories'),
+                            ),
+                            ...categories.map(
+                              (category) => DropdownMenuItem(
+                                value: category,
+                                child: Text(category),
+                              ),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            setDialogState(() {
+                              selectedCategory = value;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 15),
+
+                    Text(
+                      '${filteredItems.length} Entries  |  Total: ${formatInr(total)}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+
+                    const Divider(),
+
+                    Expanded(
+                      child: filteredItems.isEmpty
+                          ? const Center(child: Text('No expenses found.'))
+                          : ListView.separated(
+                              itemCount: filteredItems.length,
+                              separatorBuilder: (_, __) =>
+                                  const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final e = filteredItems[index];
+
+                                return ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(e.title),
+                                  subtitle: Text(
+                                    '${e.category} • '
+                                    '${e.type == ExpenseType.purchase ? 'Purchase' : 'Operating'} • '
+                                    '${DateFormat('dd MMM yyyy, hh:mm a').format(e.createdAt)}',
+                                  ),
+                                  trailing: Text(
+                                    formatInr(e.amount),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    setDialogState(() {
+                      fromDate = DateTime(
+                        DateTime.now().year,
+                        DateTime.now().month,
+                        1,
+                      );
+                      toDate = DateTime.now();
+                      selectedType = null;
+                      selectedCategory = null;
+                    });
+                  },
+                  child: const Text('Reset Filters'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Close'),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    }
+
     return BlocBuilder<ExpenseBloc, ExpenseState>(
       builder: (context, state) {
         final daily = state.items
@@ -73,6 +282,14 @@ class _ExpensePageState extends State<ExpensePage> {
                         ),
                       ],
                     ),
+                  ),
+
+                  ElevatedButton.icon(
+                    icon: Icon(Icons.history),
+                    label: Text("History"),
+                    onPressed: () {
+                      _getHistory();
+                    },
                   ),
                   OutlinedButton.icon(
                     onPressed: _pickDay,

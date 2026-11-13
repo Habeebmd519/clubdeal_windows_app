@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+
 import 'firebase_options.dart';
 import 'core/bloc/app_bloc.dart';
 import 'core/bloc/expense_bloc.dart';
@@ -20,34 +21,59 @@ Future<void> main() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   final restaurantRepository = RestaurantRepository();
   final expenseRepository = ExpenseRepository(FirebaseFirestore.instance);
-  runApp(MultiRepositoryProvider(
-    providers: [
-      RepositoryProvider.value(value: restaurantRepository),
-      RepositoryProvider.value(value: expenseRepository),
-      RepositoryProvider(create: (_) => AlertSoundService()),
-      RepositoryProvider(create: (_) => PrinterService()),
-    ],
-    child: MultiBlocProvider(
+  runApp(
+    MultiRepositoryProvider(
       providers: [
-        BlocProvider(create: (_) => AppBloc()),
-        BlocProvider(create: (context) => OrderBloc(restaurantRepository,
-          printerService: context.read<PrinterService>(),
-          alertSoundService: context.read<AlertSoundService>())..add(const OrdersStarted())),
-        BlocProvider(create: (_) => MenuBloc(restaurantRepository)..add(const MenuStarted())),
-        BlocProvider(create: (_) => ExpenseBloc(expenseRepository)
-          ..add(WatchExpenses(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day)))),
-        BlocProvider(create: (context) => SettingsBloc(context.read<AlertSoundService>())..add(const SettingsStarted())),
+        RepositoryProvider.value(value: restaurantRepository),
+        RepositoryProvider.value(value: expenseRepository),
+        RepositoryProvider(create: (_) => AlertSoundService()),
+        RepositoryProvider(create: (_) => PrinterService()),
       ],
-      child: const ClubDealDesktopApp(),
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider(create: (_) => AppBloc()),
+          BlocProvider(
+            create: (context) => OrderBloc(
+              restaurantRepository,
+              printerService: context.read<PrinterService>(),
+              alertSoundService: context.read<AlertSoundService>(),
+            )..add(const OrdersStarted()),
+          ),
+          BlocProvider(
+            create: (_) =>
+                MenuBloc(restaurantRepository)..add(const MenuStarted()),
+          ),
+          BlocProvider(
+            create: (_) => ExpenseBloc(expenseRepository)
+              ..add(
+                WatchExpenses(
+                  DateTime(
+                    DateTime.now().year,
+                    DateTime.now().month,
+                    DateTime.now().day,
+                  ),
+                ),
+              ),
+          ),
+          BlocProvider(
+            create: (context) =>
+                SettingsBloc(context.read<AlertSoundService>())
+                  ..add(const SettingsStarted()),
+          ),
+        ],
+        child: const ClubDealDesktopApp(),
+      ),
     ),
-  ));
+  );
 }
 
 class ClubDealDesktopApp extends StatelessWidget {
   const ClubDealDesktopApp({super.key});
   @override
   Widget build(BuildContext context) => MaterialApp(
-    debugShowCheckedModeBanner: false, title: 'Club Deal Desktop',
-    theme: AppTheme.dark(), home: const DesktopShell(),
+    debugShowCheckedModeBanner: false,
+    title: 'Club Deal Desktop',
+    theme: AppTheme.dark(),
+    home: const DesktopShell(),
   );
 }
