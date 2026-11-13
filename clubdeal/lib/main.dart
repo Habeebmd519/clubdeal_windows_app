@@ -1,3 +1,4 @@
+import 'package:clubdeal/core/bloc/stock_bloc.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -59,6 +60,9 @@ Future<void> main() async {
             create: (context) =>
                 SettingsBloc(context.read<AlertSoundService>())
                   ..add(const SettingsStarted()),
+          ),
+          BlocProvider(
+            create: (_) => StockBloc(repository: InMemoryStockRepository()),
           ),
         ],
         child: const ClubDealDesktopApp(),

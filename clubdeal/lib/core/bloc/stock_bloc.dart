@@ -117,11 +117,13 @@ class StockBloc extends Bloc<StockEvent, StockState> {
     try {
       final stocks = await repository.getStocks();
       final transactions = await repository.getTransactions();
-      emit(state.copyWith(
-        items: stocks,
-        transactions: transactions,
-        loading: false,
-      ));
+      emit(
+        state.copyWith(
+          items: stocks,
+          transactions: transactions,
+          loading: false,
+        ),
+      );
     } catch (e) {
       emit(state.copyWith(loading: false, error: e.toString()));
     }
@@ -146,17 +148,19 @@ class StockBloc extends Bloc<StockEvent, StockState> {
       );
       await repository.saveStock(item);
       if (event.openingQuantity > 0) {
-        await repository.saveTransaction(StockTransaction(
-          id: '${id}_opening',
-          stockId: id,
-          stockName: item.name,
-          type: StockTransactionType.purchase,
-          quantity: event.openingQuantity,
-          balanceAfter: event.openingQuantity,
-          date: DateTime.now(),
-          note: 'Opening stock',
-          unitPrice: event.unitCost,
-        ));
+        await repository.saveTransaction(
+          StockTransaction(
+            id: '${id}_opening',
+            stockId: id,
+            stockName: item.name,
+            type: StockTransactionType.purchase,
+            quantity: event.openingQuantity,
+            balanceAfter: event.openingQuantity,
+            date: DateTime.now(),
+            note: 'Opening stock',
+            unitPrice: event.unitCost,
+          ),
+        );
       }
       await _refresh(emit);
     } catch (e) {
@@ -164,10 +168,17 @@ class StockBloc extends Bloc<StockEvent, StockState> {
     }
   }
 
-  Future<void> _onPurchase(PurchaseStock event, Emitter<StockState> emit) async {
+  Future<void> _onPurchase(
+    PurchaseStock event,
+    Emitter<StockState> emit,
+  ) async {
     final item = state.items.where((e) => e.id == event.stockId).firstOrNull;
     if (item == null || event.quantity <= 0) {
-      emit(state.copyWith(error: 'Select an item and enter a quantity above zero.'));
+      emit(
+        state.copyWith(
+          error: 'Select an item and enter a quantity above zero.',
+        ),
+      );
       return;
     }
     try {
@@ -177,18 +188,20 @@ class StockBloc extends Bloc<StockEvent, StockState> {
         unitCost: event.unitPrice > 0 ? event.unitPrice : item.unitCost,
       );
       await repository.updateStock(updated);
-      await repository.saveTransaction(StockTransaction(
-        id: DateTime.now().microsecondsSinceEpoch.toString(),
-        stockId: item.id,
-        stockName: item.name,
-        type: StockTransactionType.purchase,
-        quantity: event.quantity,
-        balanceAfter: balance,
-        date: DateTime.now(),
-        supplier: event.supplier,
-        note: event.note,
-        unitPrice: event.unitPrice,
-      ));
+      await repository.saveTransaction(
+        StockTransaction(
+          id: DateTime.now().microsecondsSinceEpoch.toString(),
+          stockId: item.id,
+          stockName: item.name,
+          type: StockTransactionType.purchase,
+          quantity: event.quantity,
+          balanceAfter: balance,
+          date: DateTime.now(),
+          supplier: event.supplier,
+          note: event.note,
+          unitPrice: event.unitPrice,
+        ),
+      );
       await _refresh(emit);
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
@@ -198,26 +211,36 @@ class StockBloc extends Bloc<StockEvent, StockState> {
   Future<void> _onUse(UseStock event, Emitter<StockState> emit) async {
     final item = state.items.where((e) => e.id == event.stockId).firstOrNull;
     if (item == null || event.quantity <= 0) {
-      emit(state.copyWith(error: 'Select an item and enter a quantity above zero.'));
+      emit(
+        state.copyWith(
+          error: 'Select an item and enter a quantity above zero.',
+        ),
+      );
       return;
     }
     if (event.quantity > item.quantity) {
-      emit(state.copyWith(error: 'Not enough stock. Available: ${item.quantity} ${item.unit}.'));
+      emit(
+        state.copyWith(
+          error: 'Not enough stock. Available: ${item.quantity} ${item.unit}.',
+        ),
+      );
       return;
     }
     try {
       final balance = item.quantity - event.quantity;
       await repository.updateStock(item.copyWith(quantity: balance));
-      await repository.saveTransaction(StockTransaction(
-        id: DateTime.now().microsecondsSinceEpoch.toString(),
-        stockId: item.id,
-        stockName: item.name,
-        type: StockTransactionType.usage,
-        quantity: event.quantity,
-        balanceAfter: balance,
-        date: DateTime.now(),
-        note: event.note,
-      ));
+      await repository.saveTransaction(
+        StockTransaction(
+          id: DateTime.now().microsecondsSinceEpoch.toString(),
+          stockId: item.id,
+          stockName: item.name,
+          type: StockTransactionType.usage,
+          quantity: event.quantity,
+          balanceAfter: balance,
+          date: DateTime.now(),
+          note: event.note,
+        ),
+      );
       await _refresh(emit);
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
@@ -225,11 +248,13 @@ class StockBloc extends Bloc<StockEvent, StockState> {
   }
 
   Future<void> _refresh(Emitter<StockState> emit) async {
-    emit(state.copyWith(
-      items: await repository.getStocks(),
-      transactions: await repository.getTransactions(),
-      clearError: true,
-    ));
+    emit(
+      state.copyWith(
+        items: await repository.getStocks(),
+        transactions: await repository.getTransactions(),
+        clearError: true,
+      ),
+    );
   }
 }
 

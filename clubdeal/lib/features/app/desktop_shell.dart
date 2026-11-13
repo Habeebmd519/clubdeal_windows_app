@@ -155,13 +155,7 @@ class _Sidebar extends StatelessWidget {
           'F6',
           DesktopPage.inventory,
         ),
-        _item(
-          context,
-          Icons.local_dining,
-          'Inventory',
-          'F6',
-          DesktopPage.stock,
-        ),
+        _item(context, Icons.local_dining, 'Stock', 'F6', DesktopPage.stock),
         const Spacer(),
         _item(
           context,
