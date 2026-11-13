@@ -9,6 +9,7 @@ abstract class StockRepository {
   Future<void> saveStock(StockItem item);
   Future<void> saveTransaction(StockTransaction transaction);
   Future<void> updateStock(StockItem item);
+  Future<void> deleteStock(String stockId);
 }
 
 /// Replace this with your app's SQLite/Firestore repository.
@@ -35,6 +36,12 @@ class InMemoryStockRepository implements StockRepository {
   Future<void> updateStock(StockItem item) async {
     final index = _stocks.indexWhere((e) => e.id == item.id);
     if (index >= 0) _stocks[index] = item;
+  }
+
+  @override
+  Future<void> deleteStock(String stockId) async {
+    _stocks.removeWhere((e) => e.id == stockId);
+    _transactions.removeWhere((e) => e.stockId == stockId);
   }
 }
 
@@ -75,6 +82,12 @@ class UseStock extends StockEvent {
   UseStock({required this.stockId, required this.quantity, this.note = ''});
 }
 
+class DeleteStock extends StockEvent {
+  final String stockId;
+
+  DeleteStock(this.stockId);
+}
+
 class StockState {
   final List<StockItem> items;
   final List<StockTransaction> transactions;
@@ -110,6 +123,17 @@ class StockBloc extends Bloc<StockEvent, StockState> {
     on<CreateStock>(_onCreate);
     on<PurchaseStock>(_onPurchase);
     on<UseStock>(_onUse);
+    on<DeleteStock>(_onDelete);
+  }
+
+  Future<void> _onDelete(DeleteStock event, Emitter<StockState> emit) async {
+    try {
+      await repository.deleteStock(event.stockId);
+
+      await _refresh(emit);
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
   }
 
   Future<void> _onLoad(LoadStocks event, Emitter<StockState> emit) async {

@@ -6,7 +6,7 @@ enum DesktopPage {
   allOrders,
   menu,
   expenses,
-  inventory,
+
   stock,
   settings,
 }

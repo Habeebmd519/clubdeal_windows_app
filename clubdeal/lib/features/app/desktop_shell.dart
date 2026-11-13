@@ -6,7 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/bloc/app_bloc.dart';
 import '../dashboard/dashboard_page.dart';
 import '../expenses/expense_page.dart';
-import '../inventory/inventory_page.dart';
+
 import '../menu/menu_page.dart';
 import '../orders/all_orders_page.dart';
 import '../orders/orders_page.dart';
@@ -36,9 +36,7 @@ class DesktopShell extends StatelessWidget {
           SingleActivator(LogicalKeyboardKey.f5): AppPageIntent(
             DesktopPage.expenses,
           ),
-          SingleActivator(LogicalKeyboardKey.f6): AppPageIntent(
-            DesktopPage.inventory,
-          ),
+
           SingleActivator(LogicalKeyboardKey.f7): AppPageIntent(
             DesktopPage.stock,
           ),
@@ -148,13 +146,7 @@ class _Sidebar extends StatelessWidget {
           'F5',
           DesktopPage.expenses,
         ),
-        _item(
-          context,
-          Icons.inventory_2_outlined,
-          'Inventory',
-          'F6',
-          DesktopPage.inventory,
-        ),
+
         _item(context, Icons.local_dining, 'Stock', 'F6', DesktopPage.stock),
         const Spacer(),
         _item(
@@ -221,8 +213,6 @@ class _PageBody extends StatelessWidget {
         return const MenuPage();
       case DesktopPage.expenses:
         return const ExpensePage();
-      case DesktopPage.inventory:
-        return const InventoryPage();
       case DesktopPage.stock:
         return const Stock();
       case DesktopPage.settings:
