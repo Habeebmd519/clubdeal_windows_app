@@ -184,19 +184,24 @@ class _StockState extends State<Stock> {
                               subtitle: Text(
                                 '${item.category} • ${_status(item)} • Low-stock alert at ${item.lowStockThreshold} ${item.unit}',
                               ),
-                              trailing: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.end,
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Text(
-                                    '${item.quantity.toStringAsFixed(2)} ${item.unit}',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                  Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        '${item.quantity.toStringAsFixed(2)} ${item.unit}',
+                                        style: const TextStyle(fontWeight: FontWeight.bold),
+                                      ),
+                                      const Text('Remaining', style: TextStyle(fontSize: 11)),
+                                    ],
                                   ),
-                                  const Text(
-                                    'Remaining',
-                                    style: TextStyle(fontSize: 11),
+                                  IconButton(
+                                    tooltip: 'Delete stock item',
+                                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                    onPressed: () => _confirmDelete(context, item),
                                   ),
                                 ],
                               ),
@@ -226,6 +231,24 @@ class _StockState extends State<Stock> {
 
   Future<void> _openForm(BuildContext context, Widget form) async {
     await showDialog(context: context, builder: (_) => form);
+    if (mounted) context.read<StockBloc>().add(LoadStocks());
+  }
+
+  Future<void> _confirmDelete(BuildContext context, StockItem item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete stock item?'),
+        content: Text('Delete "${item.name}" from Firestore? Its stock movement history will also be deleted. Menu recipes that use it must be updated.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      context.read<StockBloc>().add(DeleteStock(item.id));
+    }
   }
 }
 
