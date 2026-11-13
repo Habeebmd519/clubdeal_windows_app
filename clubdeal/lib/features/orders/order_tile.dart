@@ -41,11 +41,11 @@ class _OrderTileState extends State<OrderTile> {
         FilledButton(onPressed:()=>Navigator.pop(ctx,method),child:const Text('Confirm payment'))],
     )));
     if(selected!=null && mounted) {
-      context.read<OrderBloc>().add(OrderDeliveredWithPayment(widget.order.id,selected));
       try {
+        await context.read<OrderBloc>().repository.deliverOrder(widget.order.id, selected);
         await context.read<PrinterService>().printOrder(widget.order, paymentMethod:selected);
       } catch(e) {
-        if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Payment saved, but bill printing failed: $e')));
+        if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Could not complete payment and print bill: $e')));
       }
     }
   }
