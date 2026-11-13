@@ -74,7 +74,7 @@ class InventoryRepository {
   }
 
   Future<void> recordPurchase({required String ingredientId, required double quantity,
-    required double totalCost, required String movementId}) async {
+    required double totalCost, required String movementId, String supplier = '', String notes = ''}) async {
     final ref = _ingredients.doc(ingredientId);
     final movement = _movements.doc(movementId);
     final expense = _db.collection('expenses').doc();
@@ -90,15 +90,29 @@ class InventoryRepository {
       tx.set(movement, StockMovement(id: movement.id, ingredientId: ingredientId,
         type: StockMovementType.purchase, quantity: quantity,
         unitCost: quantity == 0 ? 0 : totalCost / quantity,
-        createdAt: DateTime.now()).toMap());
+        createdAt: DateTime.now()).toMap()..addAll({'supplier': supplier, 'note': notes}));
       tx.set(expense, {
-        'title': 'Stock purchase - ${data['name'] ?? ingredientId}',
+        'title': 'Purchase (${data['name'] ?? ingredientId})',
         'amount': totalCost, 'type': 'purchase', 'category': 'Inventory',
         'ingredientId': ingredientId, 'quantity': quantity,
         'unit': data['baseUnit'] ?? 'g',
         'createdAt': Timestamp.fromDate(DateTime.now()),
-        'notes': 'Added from Inventory',
+        'supplier': supplier, 'notes': notes.isEmpty ? 'Added from Stock Management' : notes,
       });
+    });
+  }
+
+
+  Future<void> consumeStock({required String ingredientId, required double quantity, required String reason}) async {
+    if(quantity<=0) throw ArgumentError('Quantity must be above zero.');
+    final ref=_ingredients.doc(ingredientId); final movement=_movements.doc();
+    await _db.runTransaction((tx) async {
+      final snap=await tx.get(ref); if(!snap.exists) throw StateError('Stock item not found.');
+      final old=(snap.data()?['stockQuantity'] as num? ?? 0).toDouble();
+      if(quantity>old) throw StateError('Not enough stock. Available: $old.');
+      final balance=old-quantity; tx.update(ref,{'stockQuantity':balance});
+      tx.set(movement,StockMovement(id:movement.id,ingredientId:ingredientId,type:StockMovementType.consumption,
+        quantity:quantity,unitCost:0,createdAt:DateTime.now()).toMap()..addAll({'reason':reason,'balanceAfter':balance}));
     });
   }
 
