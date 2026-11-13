@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/menu_item.dart';
 import '../models/order_model.dart';
+import '../models/stock_movement_model.dart';
 
 class RestaurantRepository {
   final FirebaseFirestore _firestore;
@@ -29,11 +30,75 @@ class RestaurantRepository {
   }
 
   Future<void> deliverOrder(String orderId, PaymentMethod method) async {
-    await _orders.doc(orderId).update({
-      'status': OrderStatus.delivered.name,
-      'paymentMethod': method.name,
-      'deliveredAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
+    final orderRef = _orders.doc(orderId);
+    final orderSnapshot = await orderRef.get();
+    if (!orderSnapshot.exists) throw StateError('Order not found.');
+    final order = RestaurantOrder.fromDocument(orderSnapshot);
+
+    // Resolve the recipe usage from menu2 before the transaction. Existing
+    // menu items without ingredientUsage safely contribute zero.
+    double chickenUsed = 0, friesUsed = 0;
+    for (final item in order.items) {
+      final matches = await _menu.where('name', isEqualTo: item.name).limit(1).get();
+      if (matches.docs.isEmpty) continue;
+      final raw = matches.docs.first.data()['ingredientUsage'];
+      if (raw is Map) {
+        final usage = Map<String, dynamic>.from(raw);
+        chickenUsed += ((usage['chickenGrams'] as num?)?.toDouble() ?? 0) * item.qty;
+        friesUsed += ((usage['friesGrams'] as num?)?.toDouble() ?? 0) * item.qty;
+      }
+    }
+
+    final ingredientRefs = <String, DocumentReference<Map<String, dynamic>>>{
+      if (chickenUsed > 0) 'chicken': _firestore.collection('ingredients').doc('chicken'),
+      if (friesUsed > 0) 'fries': _firestore.collection('ingredients').doc('fries'),
+    };
+    final movementRefs = <String, DocumentReference<Map<String, dynamic>>>{
+      for (final id in ingredientRefs.keys) id: _firestore.collection('stock_movements').doc(),
+    };
+
+    await _firestore.runTransaction((tx) async {
+      final currentOrder = await tx.get(orderRef);
+      if (!currentOrder.exists) throw StateError('Order not found.');
+      final data = currentOrder.data() ?? <String, dynamic>{};
+      if (data['inventoryDeducted'] == true) {
+        tx.update(orderRef, {
+          'status': OrderStatus.delivered.name, 'paymentMethod': method.name,
+          'deliveredAt': data['deliveredAt'] ?? FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        return;
+      }
+
+      final stockSnapshots = <String, DocumentSnapshot<Map<String, dynamic>>>{};
+      for (final entry in ingredientRefs.entries) {
+        stockSnapshots[entry.key] = await tx.get(entry.value);
+      }
+
+      for (final entry in ingredientRefs.entries) {
+        final id = entry.key;
+        final quantity = id == 'chicken' ? chickenUsed : friesUsed;
+        final stock = stockSnapshots[id]!;
+        if (!stock.exists) continue;
+        final old = (stock.data()?['stockQuantity'] as num? ?? 0).toDouble();
+        tx.update(entry.value, {
+          'stockQuantity': old - quantity,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        final movement = movementRefs[id]!;
+        tx.set(movement, StockMovement(
+          id: movement.id, ingredientId: id,
+          type: StockMovementType.consumption, quantity: quantity,
+          unitCost: (stock.data()?['averageUnitCost'] as num? ?? 0).toDouble(),
+          createdAt: DateTime.now(), referenceId: orderId,
+        ).toMap());
+      }
+
+      tx.update(orderRef, {
+        'status': OrderStatus.delivered.name, 'paymentMethod': method.name,
+        'deliveredAt': FieldValue.serverTimestamp(), 'updatedAt': FieldValue.serverTimestamp(),
+        'inventoryDeducted': true,
+      });
     });
   }
 
