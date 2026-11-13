@@ -76,6 +76,13 @@ class RestaurantRepository {
       }
 
       for (final entry in ingredientRefs.entries) {
+        if (!stockSnapshots[entry.key]!.exists) {
+          final label = entry.key == 'chicken' ? 'Chicken' : 'Fries';
+          throw StateError('Set opening stock for $label before delivering this order.');
+        }
+      }
+
+      for (final entry in ingredientRefs.entries) {
         final id = entry.key;
         final quantity = id == 'chicken' ? chickenUsed : friesUsed;
         final stock = stockSnapshots[id]!;
