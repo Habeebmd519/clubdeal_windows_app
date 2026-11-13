@@ -155,14 +155,14 @@ try {
     ]);
   }
 
-  Future<void> printKitchenTicket(RestaurantOrder order) async {
+  Future<void> printKitchenTicket(RestaurantOrder order, {bool revised = false}) async {
     final name = selectedPrinterName;
     if (name == null || !isConnected) {
       throw StateError('Select an installed Windows printer in Settings.');
     }
     final lines = <String>[
       'CLUB DEAL - KITCHEN',
-      'KITCHEN ORDER TICKET',
+      revised ? 'UPDATED KITCHEN TICKET' : 'KITCHEN ORDER TICKET',
       '------------------------------',
       'Order: ${order.id}',
       'Table / Token: ${order.table}',
