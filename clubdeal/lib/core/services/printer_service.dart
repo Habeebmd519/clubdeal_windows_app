@@ -177,6 +177,20 @@ try {
     await _printLines(name, lines);
   }
 
+  Future<void> printCancellationTicket(RestaurantOrder order, String reason) async {
+    final name = selectedPrinterName;
+    if (name == null || !isConnected) return;
+    await _printLines(name, [
+      '*** ORDER CANCELLED ***',
+      'Order: ${order.id}',
+      'Table / Token: ${order.table}',
+      'Customer: ${order.customerName}',
+      'Reason: $reason',
+      'Do not prepare this order.',
+      '', '',
+    ]);
+  }
+
   Future<void> printOrder(RestaurantOrder order, {PaymentMethod? paymentMethod}) async {
     final name = selectedPrinterName;
     if (name == null || !isConnected) {
@@ -190,7 +204,7 @@ try {
       'Customer: ${order.customerName}',
       if (order.phone.isNotEmpty) 'Phone: ${order.phone}',
       'Table: ${order.table}',
-      'Status: ${order.status.name.toUpperCase()}',
+      'Status: ${paymentMethod != null || order.paymentMethod != null ? 'PAID' : order.status.name.toUpperCase()}',
       if (order.createdAt != null) 'Date: ${order.createdAt}',
       '------------------------------',
       'ITEM             QTY       AMT',
