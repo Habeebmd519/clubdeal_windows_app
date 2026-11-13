@@ -93,8 +93,14 @@ class OrderBloc extends Bloc<OrderEvent, OrderState> {
     catch (e) { emit(state.copyWith(error: 'Could not complete payment: $e')); }
   }
   Future<void> _cancel(OrderCancelled event, Emitter<OrderState> emit) async {
-    try { await repository.cancelOrder(event.orderId, event.reason); }
-    catch (e) { emit(state.copyWith(error: 'Could not cancel order: $e')); }
+    try {
+      await repository.cancelOrder(event.orderId, event.reason);
+      final printer = printerService;
+      final order = state.orders.where((o) => o.id == event.orderId).firstOrNull;
+      if (printer != null && order != null) {
+        await printer.printCancellationTicket(order, event.reason);
+      }
+    } catch (e) { emit(state.copyWith(error: 'Could not cancel order: $e')); }
   }
   Future<void> _edit(OrderEdited event, Emitter<OrderState> emit) async {
     try {
