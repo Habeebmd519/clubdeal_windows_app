@@ -42,7 +42,7 @@ class DashboardPage extends StatelessWidget {
     return BlocBuilder<OrderBloc,OrderState>(builder:(context,ordersState)=>
       BlocBuilder<ExpenseBloc,ExpenseState>(builder:(context,expenseState){
         final todays=ordersState.orders.where((o)=>o.createdAt!=null && !o.createdAt!.isBefore(start) && o.createdAt!.isBefore(start.add(const Duration(days:1)))).toList();
-        final paid=todays.where((o)=>o.status==OrderStatus.delivered && o.paymentMethod!=null).toList();
+        final paid=ordersState.orders.where((o)=>o.status==OrderStatus.delivered && o.paymentMethod!=null && (o.deliveredAt??o.createdAt)!=null && !(o.deliveredAt??o.createdAt)!.isBefore(start) && (o.deliveredAt??o.createdAt)!.isBefore(start.add(const Duration(days:1)))).toList();
         double sum(PaymentMethod m)=>paid.where((o)=>o.paymentMethod==m).fold(0.0,(a,o)=>a+o.total);
         final cash=sum(PaymentMethod.cash), card=sum(PaymentMethod.card), online=sum(PaymentMethod.online);
         final income=cash+card+online;
@@ -84,7 +84,7 @@ class DashboardPage extends StatelessWidget {
               return Card(child:Padding(padding:const EdgeInsets.all(14),child:Row(children:[
                 const Icon(Icons.account_balance_wallet_outlined,color:AppColors.success),
                 const SizedBox(width:10),
-                const Expanded(child:Text('Expected cash in counter',style:TextStyle(fontWeight:FontWeight.w700))),
+                const Expanded(child:Text('Opening float + cash sales',style:TextStyle(fontWeight:FontWeight.w700))),
                 Text(formatInr(opening+cash),style:const TextStyle(fontSize:18,fontWeight:FontWeight.w800,color:AppColors.success)),
               ])));
             }),
