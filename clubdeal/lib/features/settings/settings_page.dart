@@ -115,8 +115,8 @@ class SettingsPage extends StatelessWidget {
                       const SizedBox(height: 12),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: const Text('Automatically print new orders'),
-                        subtitle: const Text('Print each order that arrives after this app starts listening. Existing order history is not reprinted.'),
+                        title: const Text('Automatically print kitchen tickets'),
+                        subtitle: const Text('Send a kitchen ticket when a new order arrives. Existing order history is not reprinted.'),
                         value: printer.autoPrintNewOrders,
                         onChanged: printer.setAutoPrintNewOrders,
                       ),
