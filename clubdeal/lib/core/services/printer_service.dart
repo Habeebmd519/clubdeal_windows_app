@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:qr/qr.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/order_model.dart';
 
 class WindowsPrinter {
@@ -14,7 +16,9 @@ class WindowsPrinter {
 }
 
 class PrinterService extends ChangeNotifier {
-  PrinterService() { _initialize(); }
+  PrinterService() {
+    _initialize();
+  }
   static const _printerKey = 'clubdeal_windows_printer_name';
   static const _autoPrintKey = 'clubdeal_auto_print_new_orders';
   List<WindowsPrinter> printers = const [];
@@ -22,10 +26,15 @@ class PrinterService extends ChangeNotifier {
   bool isLoading = false;
   bool autoPrintNewOrders = true;
   String? lastError;
-  bool get isConnected => selectedPrinterName != null &&
+  bool get isConnected =>
+      selectedPrinterName != null &&
       printers.any((p) => p.name == selectedPrinterName);
 
-  Future<void> _initialize() async { await _loadPreferences(); await refreshPrinters(); }
+  Future<void> _initialize() async {
+    await _loadPreferences();
+    await refreshPrinters();
+  }
+
   Future<void> _loadPreferences() async {
     try {
       final p = await SharedPreferences.getInstance();
@@ -38,10 +47,14 @@ class PrinterService extends ChangeNotifier {
   Future<void> refreshPrinters() async {
     if (!Platform.isWindows) {
       printers = const [];
-      lastError = 'Windows printing is available only in the Windows desktop build.';
-      notifyListeners(); return;
+      lastError =
+          'Windows printing is available only in the Windows desktop build.';
+      notifyListeners();
+      return;
     }
-    isLoading = true; lastError = null; notifyListeners();
+    isLoading = true;
+    lastError = null;
+    notifyListeners();
     try {
       const script = r'''
 $ErrorActionPreference = 'Stop'
@@ -63,121 +76,230 @@ try {
       final output = result.stdout.toString().trim();
       final decoded = output.isEmpty ? <dynamic>[] : jsonDecode(output);
       final rows = decoded is List ? decoded : [decoded];
-      printers = rows.whereType<Map>().map((r) => WindowsPrinter(
-        r['name']?.toString() ?? '', isDefault: r['isDefault'] == true,
-      )).where((p) => p.name.isNotEmpty).toList()
-        ..sort((a,b) => a.name.compareTo(b.name));
-      if (selectedPrinterName == null || !printers.any((p) => p.name == selectedPrinterName)) {
+      printers =
+          rows
+              .whereType<Map>()
+              .map(
+                (r) => WindowsPrinter(
+                  r['name']?.toString() ?? '',
+                  isDefault: r['isDefault'] == true,
+                ),
+              )
+              .where((p) => p.name.isNotEmpty)
+              .toList()
+            ..sort((a, b) => a.name.compareTo(b.name));
+      if (selectedPrinterName == null ||
+          !printers.any((p) => p.name == selectedPrinterName)) {
         final defaults = printers.where((p) => p.isDefault);
-        selectedPrinterName = defaults.isNotEmpty ? defaults.first.name :
-          (printers.isNotEmpty ? printers.first.name : null);
+        selectedPrinterName = defaults.isNotEmpty
+            ? defaults.first.name
+            : (printers.isNotEmpty ? printers.first.name : null);
         if (selectedPrinterName != null) {
-          SharedPreferences.getInstance().then((p) => p.setString(_printerKey, selectedPrinterName!));
+          SharedPreferences.getInstance().then(
+            (p) => p.setString(_printerKey, selectedPrinterName!),
+          );
         }
       }
       if (printers.isEmpty) lastError = 'No Windows printers found. Install the printer driver and reconnect it.';
-    } catch (e) { lastError = 'Could not list Windows printers: $e'; }
-    finally { isLoading = false; notifyListeners(); }
+    } catch (e) {
+      lastError = 'Could not list Windows printers: $e';
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
   }
 
   void selectPrinter(String? name) {
-    selectedPrinterName = name; lastError = null; notifyListeners();
+    selectedPrinterName = name;
+    lastError = null;
+    notifyListeners();
     SharedPreferences.getInstance().then((p) {
-      if (name == null) { p.remove(_printerKey); } else { p.setString(_printerKey, name); }
+      if (name == null) {
+        p.remove(_printerKey);
+      } else {
+        p.setString(_printerKey, name);
+      }
     });
   }
+
   void setAutoPrintNewOrders(bool enabled) {
-    autoPrintNewOrders = enabled; notifyListeners();
-    SharedPreferences.getInstance().then((p) => p.setBool(_autoPrintKey, enabled));
+    autoPrintNewOrders = enabled;
+    notifyListeners();
+    SharedPreferences.getInstance().then(
+      (p) => p.setBool(_autoPrintKey, enabled),
+    );
   }
+
   String _requirePrinter() {
     final name = selectedPrinterName;
-    if (name == null || !isConnected) throw StateError('Select an installed Windows printer in Settings.');
+    if (name == null || !isConnected)
+      throw StateError('Select an installed Windows printer in Settings.');
     return name;
   }
 
   Future<void> testPrint() => _printTextTicket(_requirePrinter(), [
-    'CLUB DEAL', '58MM PRINTER TEST', '------------------------------',
-    'Printer connection is working.', DateTime.now().toString(), '', '',
+    'CLUB DEAL',
+    '58MM PRINTER TEST',
+    '------------------------------',
+    'Printer connection is working.',
+    DateTime.now().toString(),
+    '',
+    '',
   ], 'Club Deal Printer Test');
 
-  Future<void> printKitchenTicket(RestaurantOrder order, {bool revised = false}) async {
+  Future<void> printKitchenTicket(
+    RestaurantOrder order, {
+    bool revised = false,
+  }) async {
     final lines = <String>[
       'CLUB DEAL - KITCHEN',
       revised ? 'UPDATED KITCHEN TICKET' : 'KITCHEN ORDER TICKET',
-      '------------------------------', 'Order: ' + order.id,
-      'Table / Token: ' + order.table, 'Customer: ' + order.customerName,
-      if (order.createdAt != null) 'Time: ' + order.createdAt!.toLocal().toString(),
+      '------------------------------',
+      'Order: ' + order.id,
+      'Table / Token: ' + order.table,
+      'Customer: ' + order.customerName,
+      if (order.createdAt != null)
+        'Time: ' + order.createdAt!.toLocal().toString(),
       '------------------------------',
       ...order.items.map((i) => i.qty.toString() + ' x ' + i.name),
       if (order.note.trim().isNotEmpty) 'NOTE: ' + order.note,
-      '------------------------------', '', '',
+      '------------------------------',
+      '',
+      '',
     ];
     await _printTextTicket(_requirePrinter(), lines, 'Club Deal Kitchen');
   }
 
-  Future<void> printCancellationTicket(RestaurantOrder order, String reason) async {
+  Future<void> printCancellationTicket(
+    RestaurantOrder order,
+    String reason,
+  ) async {
     final name = selectedPrinterName;
     if (name == null || !isConnected) return;
     await _printTextTicket(name, [
-      '*** ORDER CANCELLED ***', 'Order: ' + order.id,
-      'Table / Token: ' + order.table, 'Customer: ' + order.customerName,
-      'Reason: ' + reason, 'DO NOT PREPARE THIS ORDER.', '', '',
+      '*** ORDER CANCELLED ***',
+      'Order: ' + order.id,
+      'Table / Token: ' + order.table,
+      'Customer: ' + order.customerName,
+      'Reason: ' + reason,
+      'DO NOT PREPARE THIS ORDER.',
+      '',
+      '',
     ], 'Club Deal Cancellation');
   }
 
   /// UPI QR encodes the exact order total as a fixed payment amount.
-  Future<void> printOrder(RestaurantOrder order, {PaymentMethod? paymentMethod}) async {
+  Future<void> printOrder(
+    RestaurantOrder order, {
+    PaymentMethod? paymentMethod,
+  }) async {
     final printer = _requirePrinter();
     final vpa = await _loadPaymentVpa();
     List<List<bool>>? matrix;
     if (vpa != null && order.total > 0) {
-      final uri = Uri(scheme: 'upi', host: 'pay', queryParameters: {
-        'pa': vpa, 'pn': 'Club Deal', 'am': order.total.toStringAsFixed(2),
-        'cu': 'INR', 'tn': 'Club Deal order ' + order.id, 'tr': order.id,
-      }).toString();
-      final code = QrCode.fromData(data: uri, errorCorrectLevel: QrErrorCorrectLevel.M);
+      final uri = Uri(
+        scheme: 'upi',
+        host: 'pay',
+        queryParameters: {
+          'pa': vpa,
+          'pn': 'Club Deal',
+          'am': order.total.toStringAsFixed(2),
+          'cu': 'INR',
+          'tn': 'Club Deal order ' + order.id,
+          'tr': order.id,
+        },
+      ).toString();
+      final code = QrCode.fromData(
+        data: uri,
+        errorCorrectLevel: QrErrorCorrectLevel.M,
+      );
       final image = QrImage(code);
-      matrix = List.generate(image.moduleCount, (r) =>
-        List.generate(image.moduleCount, (c) => image.isDark(r, c)));
+      matrix = List.generate(
+        image.moduleCount,
+        (r) => List.generate(image.moduleCount, (c) => image.isDark(r, c)),
+      );
     }
     final date = order.createdAt?.toLocal() ?? DateTime.now();
     final paidBy = paymentMethod ?? order.paymentMethod;
     await _printReceipt(printer, {
-      'kind': 'bill', 'restaurant': 'CLUB DEAL', 'tagline': 'FRESH & FIRED UP',
+      'kind': 'bill',
+      'restaurant': 'CLUB DEAL',
+      'tagline': 'FRESH & FIRED UP',
       'billNo': order.id,
-      'date': date.day.toString().padLeft(2,'0') + '/' +
-          date.month.toString().padLeft(2,'0') + '/' + date.year.toString(),
-      'time': date.hour.toString().padLeft(2,'0') + ':' + date.minute.toString().padLeft(2,'0'),
-      'customer': order.customerName, 'phone': order.phone, 'table': order.table,
-      'items': order.items.map((i) => <String,dynamic>{
-        'name': i.name, 'qty': i.qty, 'price': i.price, 'total': i.total,
-      }).toList(),
-      'subtotal': order.total, 'discount': 0, 'total': order.total,
+      'date':
+          date.day.toString().padLeft(2, '0') +
+          '/' +
+          date.month.toString().padLeft(2, '0') +
+          '/' +
+          date.year.toString(),
+      'time':
+          date.hour.toString().padLeft(2, '0') +
+          ':' +
+          date.minute.toString().padLeft(2, '0'),
+      'customer': order.customerName,
+      'phone': order.phone,
+      'table': order.table,
+      'items': order.items
+          .map(
+            (i) => <String, dynamic>{
+              'name': i.name,
+              'qty': i.qty,
+              'price': i.price,
+              'total': i.total,
+            },
+          )
+          .toList(),
+      'subtotal': order.total,
+      'discount': 0,
+      'total': order.total,
       'status': paidBy != null ? 'PAID' : order.status.name.toUpperCase(),
       'payment': paidBy?.name.toUpperCase() ?? 'PAYMENT DUE',
-      'note': order.note, 'vpa': vpa ?? '', 'qr': matrix,
-      'upiAmount': order.total.toStringAsFixed(2), 'footer': 'Thank you! Visit again.',
+      'note': order.note,
+      'vpa': vpa ?? '',
+      'qr': matrix,
+      'upiAmount': order.total.toStringAsFixed(2),
+      'footer': 'Thank you! Visit again.',
     });
   }
 
   Future<String?> _loadPaymentVpa() async {
     try {
-      final doc = await FirebaseFirestore.instance.collection('app_config').doc('paymentBankId').get();
+      final doc = await FirebaseFirestore.instance
+          .collection('app_config')
+          .doc('paymentBankId')
+          .get();
       final value = doc.data()?['bankId']?.toString().trim();
-      if (value == null || !RegExp(r'^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+$').hasMatch(value)) return null;
+      if (value == null ||
+          !RegExp(r'^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+$').hasMatch(value))
+        return null;
       return value;
-    } catch (_) { return null; }
+    } catch (_) {
+      return null;
+    }
   }
 
-  Future<void> _printTextTicket(String printer, List<String> lines, String title) =>
-      _printReceipt(printer, {'kind':'text','lines':lines,'documentName':title});
+  Future<void> _printTextTicket(
+    String printer,
+    List<String> lines,
+    String title,
+  ) => _printReceipt(printer, {
+    'kind': 'text',
+    'lines': lines,
+    'documentName': title,
+  });
 
-  Future<void> _printReceipt(String printerName, Map<String,dynamic> data) async {
-    if (!Platform.isWindows) throw UnsupportedError('Printing is supported in the Windows desktop app.');
+  Future<void> _printReceipt(
+    String printerName,
+    Map<String, dynamic> data,
+  ) async {
+    if (!Platform.isWindows)
+      throw UnsupportedError(
+        'Printing is supported in the Windows desktop app.',
+      );
     final payload = base64Encode(utf8.encode(jsonEncode(data)));
     final encodedPrinter = base64Encode(utf8.encode(printerName));
-    final script = r'''
+    final script =
+        r'''
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 $printerName = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__PRINTER__'))
@@ -267,28 +389,50 @@ $doc.add_PrintPage({
 })
 $doc.Print(); $doc.Dispose()
 Write-Output 'PRINT_SUBMITTED'
-'''.replaceAll('__PRINTER__', encodedPrinter).replaceAll('__DATA__', payload);
+'''
+            .replaceAll('__PRINTER__', encodedPrinter)
+            .replaceAll('__DATA__', payload);
     try {
       final result = await _runPowerShell(script);
       if (!result.stdout.toString().contains('PRINT_SUBMITTED')) {
-        throw StateError(result.stderr.toString().trim().isEmpty
-          ? 'Windows did not confirm the print job.' : result.stderr.toString().trim());
+        throw StateError(
+          result.stderr.toString().trim().isEmpty
+              ? 'Windows did not confirm the print job.'
+              : result.stderr.toString().trim(),
+        );
       }
       lastError = null;
-    } catch(e) { lastError='$e'; notifyListeners(); rethrow; }
+    } catch (e) {
+      lastError = '$e';
+      notifyListeners();
+      rethrow;
+    }
   }
 
   Future<ProcessResult> _runPowerShell(String script) async {
-    final units=script.codeUnits; final bytes=Uint8List(units.length*2);
-    for(var i=0;i<units.length;i++) { bytes[i*2]=units[i]&0xff; bytes[i*2+1]=(units[i]>>8)&0xff; }
-    final result=await Process.run('powershell.exe',[
-      '-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass',
-      '-EncodedCommand',base64Encode(bytes),
-    ],runInShell:false);
-    if(result.exitCode!=0) {
-      throw ProcessException('powershell.exe',const [],
-        result.stderr.toString().trim().isEmpty ? result.stdout.toString().trim() : result.stderr.toString().trim(),
-        result.exitCode);
+    final units = script.codeUnits;
+    final bytes = Uint8List(units.length * 2);
+    for (var i = 0; i < units.length; i++) {
+      bytes[i * 2] = units[i] & 0xff;
+      bytes[i * 2 + 1] = (units[i] >> 8) & 0xff;
+    }
+    final result = await Process.run('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-EncodedCommand',
+      base64Encode(bytes),
+    ], runInShell: false);
+    if (result.exitCode != 0) {
+      throw ProcessException(
+        'powershell.exe',
+        const [],
+        result.stderr.toString().trim().isEmpty
+            ? result.stdout.toString().trim()
+            : result.stderr.toString().trim(),
+        result.exitCode,
+      );
     }
     return result;
   }
