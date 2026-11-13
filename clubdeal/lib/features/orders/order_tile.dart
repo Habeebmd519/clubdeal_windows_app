@@ -43,9 +43,15 @@ class _OrderTileState extends State<OrderTile> {
     if(selected!=null && mounted) {
       try {
         await context.read<OrderBloc>().repository.deliverOrder(widget.order.id, selected);
-        await context.read<PrinterService>().printOrder(widget.order, paymentMethod:selected);
       } catch(e) {
-        if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Could not complete payment and print bill: $e')));
+        if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Payment could not be saved: $e')));
+        return;
+      }
+      try {
+        await context.read<PrinterService>().printOrder(widget.order, paymentMethod:selected);
+        if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Payment saved and bill printed.')));
+      } catch(e) {
+        if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Payment saved. Bill printing failed: $e')));
       }
     }
   }
