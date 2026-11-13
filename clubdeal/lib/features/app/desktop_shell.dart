@@ -1,3 +1,4 @@
+import 'package:clubdeal/features/settings/cafe_status_widget.dart';
 import 'package:clubdeal/features/stock/stock_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -96,6 +97,7 @@ class _Sidebar extends StatelessWidget {
           child: Row(
             children: [
               CircleAvatar(
+                backgroundColor: Colors.transparent,
                 child: Image(image: AssetImage('assets/icon/appLogo.png')),
               ),
               SizedBox(width: 10),
@@ -107,6 +109,7 @@ class _Sidebar extends StatelessWidget {
                   letterSpacing: 1.2,
                 ),
               ),
+              const CafeStatusWidget(),
             ],
           ),
         ),

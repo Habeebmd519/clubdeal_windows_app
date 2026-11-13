@@ -37,11 +37,16 @@ class _OrdersPageState extends State<OrdersPage> {
         // Active orders exclude delivered and cancelled orders.
         // Normal orders page includes every order.
         final source = widget.activeOnly
-            ? state.orders.where(
-                (order) =>
-                    order.status != OrderStatus.delivered &&
-                    order.status != OrderStatus.cancelled,
-              )
+            ? state.orders.where((o) {
+                // When Cancelled filter is selected, show cancelled orders.
+                if (filter == OrderStatus.cancelled) {
+                  return o.status == OrderStatus.cancelled;
+                }
+
+                // Normal Active Orders.
+                return o.status != OrderStatus.delivered &&
+                    o.status != OrderStatus.cancelled;
+              })
             : state.orders;
 
         // Search and status filtering.
