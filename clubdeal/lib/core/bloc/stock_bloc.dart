@@ -1,4 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../repositories/inventory_repository.dart';
 
 import '../models/stock_model.dart';
 import '../models/stock_transaction_model.dart';
@@ -10,38 +12,68 @@ abstract class StockRepository {
   Future<void> saveTransaction(StockTransaction transaction);
   Future<void> updateStock(StockItem item);
   Future<void> deleteStock(String stockId);
+  Future<void> purchaseStock({required String stockId, required double quantity, required double totalCost, required String supplier, required String note});
+  Future<void> useStock({required String stockId, required double quantity, required String note});
 }
 
-/// Replace this with your app's SQLite/Firestore repository.
-/// This implementation is intentionally in-memory for a dependency-free demo.
-class InMemoryStockRepository implements StockRepository {
-  final List<StockItem> _stocks = [];
-  final List<StockTransaction> _transactions = [];
+/// Firestore is the single source for Stock Management and Menu recipe ingredients.
+class FirestoreStockRepository implements StockRepository {
+  FirestoreStockRepository(this.db) : inventory = InventoryRepository(db);
+  final FirebaseFirestore db;
+  final InventoryRepository inventory;
+  CollectionReference<Map<String,dynamic>> get _stocks => db.collection('ingredients');
+  CollectionReference<Map<String,dynamic>> get _moves => db.collection('stock_movements');
 
   @override
-  Future<List<StockItem>> getStocks() async => List.unmodifiable(_stocks);
-
-  @override
-  Future<List<StockTransaction>> getTransactions() async =>
-      List.unmodifiable(_transactions);
-
-  @override
-  Future<void> saveStock(StockItem item) async => _stocks.add(item);
-
-  @override
-  Future<void> saveTransaction(StockTransaction transaction) async =>
-      _transactions.add(transaction);
-
-  @override
-  Future<void> updateStock(StockItem item) async {
-    final index = _stocks.indexWhere((e) => e.id == item.id);
-    if (index >= 0) _stocks[index] = item;
+  Future<List<StockItem>> getStocks() async {
+    final s = await _stocks.orderBy('name').get();
+    return s.docs.map((d) { final m=d.data(); return StockItem(
+      id:d.id, name:m['name']?.toString()??'', category:m['category']?.toString()??'General',
+      unit:m['baseUnit']?.toString()??'pcs', quantity:(m['stockQuantity'] as num? ?? 0).toDouble(),
+      lowStockThreshold:(m['lowStockThreshold'] as num? ?? 0).toDouble(),
+      unitCost:(m['averageUnitCost'] as num? ?? 0).toDouble(),
+      createdAt:(m['createdAt'] as Timestamp?)?.toDate()??DateTime.now()); }).toList();
   }
-
   @override
-  Future<void> deleteStock(String stockId) async {
-    _stocks.removeWhere((e) => e.id == stockId);
-    _transactions.removeWhere((e) => e.stockId == stockId);
+  Future<List<StockTransaction>> getTransactions() async {
+    final s=await _moves.orderBy('createdAt',descending:true).limit(500).get();
+    final stock= {for(final x in await getStocks()) x.id:x.name};
+    return s.docs.map((d) {final m=d.data(); final t=m['type']?.toString();
+      final date=m['createdAt']; return StockTransaction(id:d.id,stockId:m['ingredientId']?.toString()??'',
+      stockName:stock[m['ingredientId']?.toString()]??'Stock',
+      type:t=='purchase'?StockTransactionType.purchase:(t=='consumption'||t=='usage'?StockTransactionType.usage:StockTransactionType.adjustment),
+      quantity:(m['quantity'] as num? ?? 0).toDouble(),balanceAfter:(m['balanceAfter'] as num? ?? 0).toDouble(),
+      date:date is Timestamp?date.toDate():DateTime.now(),note:m['reason']?.toString()??m['note']?.toString()??'',
+      supplier:m['supplier']?.toString()??'',unitPrice:(m['unitCost'] as num? ?? 0).toDouble());}).toList();
+  }
+  @override
+  Future<void> saveStock(StockItem x) async {
+    await _stocks.doc(x.id).set({'name':x.name,'category':x.category,'baseUnit':x.unit,
+      'stockQuantity':0.0,'averageUnitCost':x.unitCost,'lowStockThreshold':x.lowStockThreshold,
+      'createdAt':Timestamp.fromDate(x.createdAt)});
+    if(x.quantity>0) await inventory.setOpeningStock(ingredientId:x.id,name:x.name,unit:x.unit,quantity:x.quantity);
+  }
+  @override
+  Future<void> saveTransaction(StockTransaction x) async {
+    await _moves.doc(x.id).set({'ingredientId':x.stockId,'type':x.type==StockTransactionType.purchase?'purchase':x.type==StockTransactionType.usage?'consumption':'adjustment',
+      'quantity':x.quantity,'unitCost':x.unitPrice,'createdAt':Timestamp.fromDate(x.date),
+      'balanceAfter':x.balanceAfter,'reason':x.note,'supplier':x.supplier});
+  }
+  @override
+  Future<void> updateStock(StockItem x) => _stocks.doc(x.id).update({'name':x.name,'category':x.category,'baseUnit':x.unit,
+    'stockQuantity':x.quantity,'averageUnitCost':x.unitCost,'lowStockThreshold':x.lowStockThreshold});
+  @override
+  Future<void> purchaseStock({required String stockId,required double quantity,required double totalCost,required String supplier,required String note}) =>
+    inventory.recordPurchase(ingredientId:stockId,quantity:quantity,totalCost:totalCost,movementId:_moves.doc().id,supplier:supplier,notes:note);
+  @override
+  Future<void> useStock({required String stockId,required double quantity,required String note}) =>
+    inventory.consumeStock(ingredientId:stockId,quantity:quantity,reason:note);
+  @override
+  Future<void> deleteStock(String id) async {
+    final history=await _moves.where('ingredientId',isEqualTo:id).get();
+    final batch=db.batch(); batch.delete(_stocks.doc(id));
+    for(final d in history.docs){batch.delete(d.reference);}
+    await batch.commit();
   }
 }
 
@@ -206,26 +238,8 @@ class StockBloc extends Bloc<StockEvent, StockState> {
       return;
     }
     try {
-      final balance = item.quantity + event.quantity;
-      final updated = item.copyWith(
-        quantity: balance,
-        unitCost: event.unitPrice > 0 ? event.unitPrice : item.unitCost,
-      );
-      await repository.updateStock(updated);
-      await repository.saveTransaction(
-        StockTransaction(
-          id: DateTime.now().microsecondsSinceEpoch.toString(),
-          stockId: item.id,
-          stockName: item.name,
-          type: StockTransactionType.purchase,
-          quantity: event.quantity,
-          balanceAfter: balance,
-          date: DateTime.now(),
-          supplier: event.supplier,
-          note: event.note,
-          unitPrice: event.unitPrice,
-        ),
-      );
+      await repository.purchaseStock(stockId:item.id, quantity:event.quantity,
+        totalCost:event.quantity*event.unitPrice, supplier:event.supplier, note:event.note);
       await _refresh(emit);
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
@@ -251,20 +265,7 @@ class StockBloc extends Bloc<StockEvent, StockState> {
       return;
     }
     try {
-      final balance = item.quantity - event.quantity;
-      await repository.updateStock(item.copyWith(quantity: balance));
-      await repository.saveTransaction(
-        StockTransaction(
-          id: DateTime.now().microsecondsSinceEpoch.toString(),
-          stockId: item.id,
-          stockName: item.name,
-          type: StockTransactionType.usage,
-          quantity: event.quantity,
-          balanceAfter: balance,
-          date: DateTime.now(),
-          note: event.note,
-        ),
-      );
+      await repository.useStock(stockId:item.id, quantity:event.quantity, note:event.note);
       await _refresh(emit);
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
