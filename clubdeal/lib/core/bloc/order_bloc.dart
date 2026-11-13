@@ -74,7 +74,7 @@ class OrderBloc extends Bloc<OrderEvent, OrderState> {
       final printer = printerService;
       if (printer != null && printer.autoPrintNewOrders) {
         for (final order in newlyCreated) {
-          printer.printOrder(order).catchError((Object error) {});
+          printer.printKitchenTicket(order).catchError((Object error) {});
         }
       }
     } else {
