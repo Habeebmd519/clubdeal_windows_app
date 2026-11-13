@@ -155,6 +155,28 @@ try {
     ]);
   }
 
+  Future<void> printKitchenTicket(RestaurantOrder order) async {
+    final name = selectedPrinterName;
+    if (name == null || !isConnected) {
+      throw StateError('Select an installed Windows printer in Settings.');
+    }
+    final lines = <String>[
+      'CLUB DEAL - KITCHEN',
+      'KITCHEN ORDER TICKET',
+      '------------------------------',
+      'Order: ${order.id}',
+      'Table / Token: ${order.table}',
+      'Customer: ${order.customerName}',
+      if (order.createdAt != null) 'Time: ${order.createdAt}',
+      '------------------------------',
+      ...order.items.map((item) => '${item.qty} x ${item.name}'),
+      if (order.note.trim().isNotEmpty) ...['------------------------------', 'NOTE: ${order.note}'],
+      '------------------------------',
+      '', '',
+    ];
+    await _printLines(name, lines);
+  }
+
   Future<void> printOrder(RestaurantOrder order) async {
     final name = selectedPrinterName;
     if (name == null || !isConnected) {
