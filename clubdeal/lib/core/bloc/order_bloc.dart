@@ -96,7 +96,10 @@ class OrderBloc extends Bloc<OrderEvent, OrderState> {
     try {
       await repository.cancelOrder(event.orderId, event.reason);
       final printer = printerService;
-      final order = state.orders.where((o) => o.id == event.orderId).firstOrNull;
+      RestaurantOrder? order;
+      for (final candidate in state.orders) {
+        if (candidate.id == event.orderId) { order = candidate; break; }
+      }
       if (printer != null && order != null) {
         await printer.printCancellationTicket(order, event.reason);
       }
