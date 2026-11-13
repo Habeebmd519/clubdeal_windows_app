@@ -109,6 +109,22 @@ class OrderBloc extends Bloc<OrderEvent, OrderState> {
     try {
       await repository.editOrder(orderId: event.orderId, customerName: event.customerName,
         phone: event.phone, table: event.table, note: event.note, items: event.items);
+      RestaurantOrder? previous;
+      for (final candidate in state.orders) {
+        if (candidate.id == event.orderId) { previous = candidate; break; }
+      }
+      if (previous != null && printerService != null) {
+        final revised = RestaurantOrder(
+          id: previous.id, customerName: event.customerName, phone: event.phone,
+          table: event.table, items: event.items,
+          total: event.items.fold<double>(0, (sum, item) => sum + item.total),
+          status: previous.status, note: event.note, source: previous.source,
+          createdAt: previous.createdAt, paymentMethod: previous.paymentMethod,
+          deliveredAt: previous.deliveredAt, cancelledAt: previous.cancelledAt,
+          cancelReason: previous.cancelReason,
+        );
+        try { await printerService!.printKitchenTicket(revised, revised: true); } catch (_) {}
+      }
     } catch (e) { emit(state.copyWith(error: 'Could not edit order: $e')); }
   }
   @override
