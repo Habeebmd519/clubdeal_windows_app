@@ -1,77 +1,133 @@
+import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../core/bloc/menu_bloc.dart';
+import 'package:intl/intl.dart';
+import '../../core/models/ingredient_model.dart';
+import '../../core/repositories/inventory_repository.dart';
 
-class InventoryPage extends StatelessWidget {
+class InventoryPage extends StatefulWidget {
   const InventoryPage({super.key});
+  @override
+  State<InventoryPage> createState() => _InventoryPageState();
+}
+
+class _InventoryPageState extends State<InventoryPage> {
+  late final InventoryRepository _repository;
+  StreamSubscription<List<Ingredient>>? _subscription;
+  List<Ingredient> _items = const [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _repository = InventoryRepository(FirebaseFirestore.instance);
+    _subscription = _repository.watchIngredients().listen((items) {
+      if (mounted) setState(() { _items = items; _loading = false; _error = null; });
+    }, onError: (Object e) {
+      if (mounted) setState(() { _loading = false; _error = e.toString(); });
+    });
+  }
+  @override
+  void dispose() { _subscription?.cancel(); super.dispose(); }
+
+  Ingredient? _find(String id) {
+    for (final item in _items) { if (item.id == id) return item; }
+    return null;
+  }
+
+  Future<void> _openingStock() async {
+    final chicken = TextEditingController(text: (_find('chicken')?.stockQuantity ?? 0).toStringAsFixed(0));
+    final fries = TextEditingController(text: (_find('fries')?.stockQuantity ?? 0).toStringAsFixed(0));
+    final form = GlobalKey<FormState>();
+    final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('Opening stock'),
+      content: SizedBox(width: 390, child: Form(key: form, child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Text('Enter the physical quantity available before service starts. Saving replaces the current balance.'),
+        const SizedBox(height: 14),
+        TextFormField(controller: chicken, keyboardType: const TextInputType.numberWithOptions(decimal:true), decoration: const InputDecoration(labelText:'Chicken (grams)'), validator:_validate),
+        const SizedBox(height: 10),
+        TextFormField(controller: fries, keyboardType: const TextInputType.numberWithOptions(decimal:true), decoration: const InputDecoration(labelText:'Fries (grams)'), validator:_validate),
+      ]))),
+      actions: [TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Cancel')),
+        FilledButton(onPressed:()=>Navigator.pop(ctx,form.currentState?.validate()??false),child:const Text('Save opening stock'))],
+    ));
+    if (ok == true) {
+      try {
+        await _repository.setOpeningStock(ingredientId:'chicken',name:'Chicken',unit:'g',quantity:double.parse(chicken.text));
+        await _repository.setOpeningStock(ingredientId:'fries',name:'Fries',unit:'g',quantity:double.parse(fries.text));
+        if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Opening stock saved.')));
+      } catch(e) { if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Could not save opening stock: $e'))); }
+    }
+    chicken.dispose(); fries.dispose();
+  }
+
+  Future<void> _addStock(Ingredient item) async {
+    final quantity = TextEditingController();
+    final cost = TextEditingController(text:'0');
+    final form = GlobalKey<FormState>();
+    final ok = await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
+      title:Text('Add ${item.name} stock'),
+      content:Form(key:form,child:Column(mainAxisSize:MainAxisSize.min,children:[
+        TextFormField(controller:quantity,keyboardType:const TextInputType.numberWithOptions(decimal:true),decoration:InputDecoration(labelText:'Quantity (${item.baseUnit})'),validator:_validate),
+        const SizedBox(height:8),
+        TextFormField(controller:cost,keyboardType:const TextInputType.numberWithOptions(decimal:true),decoration:const InputDecoration(labelText:'Total purchase cost (₹)'),validator:_validate),
+      ])),
+      actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Cancel')),FilledButton(onPressed:()=>Navigator.pop(ctx,form.currentState?.validate()??false),child:const Text('Add stock'))],
+    ));
+    if(ok==true) {
+      try { await _repository.addStock(ingredientId:item.id,quantity:double.parse(quantity.text),totalCost:double.parse(cost.text));
+        if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Stock added.')));
+      } catch(e) { if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Could not add stock: $e'))); }
+    }
+    quantity.dispose(); cost.dispose();
+  }
+
+  String? _validate(String? value) {
+    final n=double.tryParse(value?.trim()??'');
+    if(n==null||n<0) return 'Enter a valid number';
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<MenuBloc, MenuState>(
-      builder: (context, state) {
-        final chicken = state.items.fold<double>(0, (sum, item) => sum + item.chickenGrams);
-        final fries = state.items.fold<double>(0, (sum, item) => sum + item.friesGrams);
-        return Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Inventory', style: Theme.of(context).textTheme.headlineMedium),
-            const SizedBox(height: 4),
-            const Text('Ingredient usage configured on menu items in Firestore menu2'),
-            const SizedBox(height: 18),
-            Row(children: [
-              Expanded(child: _Metric(title: 'Menu items', value: '${state.items.length}', icon: Icons.restaurant_menu)),
-              const SizedBox(width: 12),
-              Expanded(child: _Metric(title: 'Chicken recipe total', value: '${chicken.toStringAsFixed(0)} g', icon: Icons.set_meal)),
-              const SizedBox(width: 12),
-              Expanded(child: _Metric(title: 'Fries recipe total', value: '${fries.toStringAsFixed(0)} g', icon: Icons.fastfood)),
-            ]),
-            const SizedBox(height: 18),
-            Expanded(child: state.loading
-              ? const Center(child: CircularProgressIndicator())
-              : state.error != null
-                ? Center(child: Text('Could not load menu2 ingredient usage: ${state.error}'))
-                : Card(child: Column(children: [
-                    const ListTile(title: Text('Ingredient usage per menu item', style: TextStyle(fontWeight: FontWeight.w700))),
-                    const Divider(height: 1),
-                    Expanded(child: ListView.separated(
-                      itemCount: state.items.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final item = state.items[index];
-                        return ListTile(
-                          leading: Text(item.emoji, style: const TextStyle(fontSize: 22)),
-                          title: Text(item.name),
-                          subtitle: Text('Chicken: ${item.chickenGrams.toStringAsFixed(0)} g  ·  Fries: ${item.friesGrams.toStringAsFixed(0)} g'),
-                          trailing: Text(item.isAvailable ? 'Available' : 'Unavailable', style: TextStyle(color: item.isAvailable ? Colors.green : Colors.orange)),
-                        );
-                      },
-                    )),
-                  ])),
-            ),
-            const SizedBox(height: 8),
-            const Text('Note: this page shows recipe usage, not live on-hand stock. Purchase and stock deduction workflows must be configured before displaying stock balances.', style: TextStyle(fontSize: 11, color: Colors.white60)),
-          ]),
-        );
-      },
-    );
+    final chicken=_find('chicken'), fries=_find('fries');
+    return Padding(padding:const EdgeInsets.all(24),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Row(children:[const Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        Text('Inventory',style:TextStyle(fontSize:26,fontWeight:FontWeight.w800)),
+        SizedBox(height:4),Text('Opening stock, purchases and current ingredient balances'),
+      ])),FilledButton.icon(onPressed:_openingStock,icon:const Icon(Icons.inventory_2_outlined),label:const Text('Set Opening Stock'))]),
+      const SizedBox(height:18),
+      Row(children:[
+        Expanded(child:_StockCard(name:'Chicken',item:chicken,onAdd:chicken==null?null:()=>_addStock(chicken))),
+        const SizedBox(width:12),
+        Expanded(child:_StockCard(name:'Fries',item:fries,onAdd:fries==null?null:()=>_addStock(fries))),
+      ]),
+      const SizedBox(height:18),
+      const Text('All ingredients',style:TextStyle(fontSize:16,fontWeight:FontWeight.w700)),
+      const SizedBox(height:8),
+      if(_error!=null) Text('Could not load inventory: $_error'),
+      Expanded(child:_loading?const Center(child:CircularProgressIndicator()):_items.isEmpty
+        ? const Center(child:Text('No stock entered. Use Set Opening Stock to get started.'))
+        : ListView.separated(itemCount:_items.length,separatorBuilder:(_,__)=>const Divider(height:1),
+          itemBuilder:(context,index){final item=_items[index];return ListTile(
+            leading:const Icon(Icons.inventory_2_outlined),title:Text(item.name),
+            subtitle:Text('Average cost: ₹${item.averageUnitCost.toStringAsFixed(2)} per ${item.baseUnit}'),
+            trailing:Text('${item.stockQuantity.toStringAsFixed(0)} ${item.baseUnit}',style:const TextStyle(fontSize:16,fontWeight:FontWeight.w800)),
+            onTap:()=>_addStock(item),
+          );})),
+      const Text('Opening stock is recorded as a stock adjustment. Purchases increase the balance and update average unit cost.',style:TextStyle(fontSize:11,color:Colors.black54)),
+    ]));
   }
 }
 
-class _Metric extends StatelessWidget {
-  const _Metric({required this.title, required this.value, required this.icon});
-  final String title, value;
-  final IconData icon;
+class _StockCard extends StatelessWidget {
+  const _StockCard({required this.name,required this.item,required this.onAdd});
+  final String name; final Ingredient? item; final VoidCallback? onAdd;
   @override
-  Widget build(BuildContext context) => Card(child: Padding(
-    padding: const EdgeInsets.all(16),
-    child: Row(children: [
-      Icon(icon, size: 26, color: Theme.of(context).colorScheme.secondary),
-      const SizedBox(width: 12),
-      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title, style: const TextStyle(fontSize: 12, color: Colors.white70)),
-        const SizedBox(height: 4),
-        Text(value, style: Theme.of(context).textTheme.titleLarge),
-      ])),
-    ]),
-  ));
+  Widget build(BuildContext context)=>Card(child:Padding(padding:const EdgeInsets.all(18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+    Row(children:[Text(name,style:const TextStyle(fontWeight:FontWeight.w700)),const Spacer(),IconButton(tooltip:'Add purchase',onPressed:onAdd,icon:const Icon(Icons.add_circle_outline))]),
+    const SizedBox(height:8),Text('${(item?.stockQuantity??0).toStringAsFixed(0)} ${item?.baseUnit??'g'}',style:Theme.of(context).textTheme.headlineSmall),
+    Text(item==null?'Opening stock not set':'Current stock',style:const TextStyle(fontSize:11,color:Colors.black54)),
+  ])));
 }
