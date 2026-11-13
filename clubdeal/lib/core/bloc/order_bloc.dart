@@ -101,7 +101,7 @@ class OrderBloc extends Bloc<OrderEvent, OrderState> {
         if (candidate.id == event.orderId) { order = candidate; break; }
       }
       if (printer != null && order != null) {
-        await printer.printCancellationTicket(order, event.reason);
+        try { await printer.printCancellationTicket(order, event.reason); } catch (_) {}
       }
     } catch (e) { emit(state.copyWith(error: 'Could not cancel order: $e')); }
   }
