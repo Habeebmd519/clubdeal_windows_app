@@ -62,7 +62,7 @@ Future<void> main() async {
                   ..add(const SettingsStarted()),
           ),
           BlocProvider(
-            create: (_) => StockBloc(repository: InMemoryStockRepository()),
+            create: (_) => StockBloc(repository: FirestoreStockRepository(FirebaseFirestore.instance)),
           ),
         ],
         child: const ClubDealDesktopApp(),
