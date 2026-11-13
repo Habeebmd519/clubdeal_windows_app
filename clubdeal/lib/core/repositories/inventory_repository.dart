@@ -13,9 +13,8 @@ class InventoryRepository {
   Stream<List<Ingredient>> watchIngredients() => _ingredients.orderBy('name').snapshots()
     .map((s) => s.docs.map((d) => Ingredient.fromMap(d.id, d.data())).toList());
 
-  Future<void> saveIngredient(Ingredient item) async {
-    await _ingredients.doc(item.id).set(item.toMap(), SetOptions(merge: true));
-  }
+  Future<void> saveIngredient(Ingredient item) async =>
+    _ingredients.doc(item.id).set(item.toMap(), SetOptions(merge: true));
 
   Future<void> saveRecipe(MenuRecipe recipe) => _recipes.doc(recipe.menuItemId)
     .set(recipe.toMap(), SetOptions(merge: true));
@@ -23,6 +22,32 @@ class InventoryRepository {
   Future<MenuRecipe?> getRecipe(String menuItemId) async {
     final d = await _recipes.doc(menuItemId).get();
     return d.exists ? MenuRecipe.fromMap(d.id, d.data()!) : null;
+  }
+
+  Future<void> setOpeningStock({required String ingredientId, required String name,
+    required String unit, required double quantity}) async {
+    if (quantity < 0) throw ArgumentError('Opening stock cannot be negative.');
+    final ingredient = _ingredients.doc(ingredientId);
+    final movement = _movements.doc();
+    await _db.runTransaction((tx) async {
+      tx.set(ingredient, {
+        'name': name, 'baseUnit': unit, 'stockQuantity': quantity,
+        'averageUnitCost': 0, 'openingStock': quantity,
+        'openingAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      tx.set(movement, StockMovement(
+        id: movement.id, ingredientId: ingredientId,
+        type: StockMovementType.adjustment, quantity: quantity,
+        unitCost: 0, createdAt: DateTime.now(),
+      ).toMap()..['reason'] = 'Opening stock');
+    });
+  }
+
+  Future<void> addStock({required String ingredientId, required double quantity,
+    required double totalCost}) async {
+    if (quantity <= 0 || totalCost < 0) throw ArgumentError('Enter a valid quantity and cost.');
+    await recordPurchase(ingredientId: ingredientId, quantity: quantity,
+      totalCost: totalCost, movementId: _movements.doc().id);
   }
 
   Future<void> recordPurchase({
@@ -33,7 +58,7 @@ class InventoryRepository {
     final movement = _movements.doc(movementId);
     await _db.runTransaction((tx) async {
       final snap = await tx.get(ref);
-      if (!snap.exists) throw StateError('Ingredient not found');
+      if (!snap.exists) throw StateError('Ingredient not found. Set opening stock first.');
       final data = snap.data()!;
       final oldQty = (data['stockQuantity'] as num? ?? 0).toDouble();
       final oldCost = (data['averageUnitCost'] as num? ?? 0).toDouble();
