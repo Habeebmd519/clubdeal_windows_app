@@ -56,6 +56,7 @@ class InventoryRepository {
   }) async {
     final ref = _ingredients.doc(ingredientId);
     final movement = _movements.doc(movementId);
+    final expense = _db.collection('expenses').doc();
     await _db.runTransaction((tx) async {
       final snap = await tx.get(ref);
       if (!snap.exists) throw StateError('Ingredient not found. Set opening stock first.');
@@ -71,6 +72,16 @@ class InventoryRepository {
         unitCost: quantity == 0 ? 0 : totalCost / quantity,
         createdAt: DateTime.now(),
       ).toMap());
+      // Stock purchases also appear in Expenses automatically, avoiding
+      // a second manual entry and keeping the daily dashboard in sync.
+      tx.set(expense, {
+        'title': 'Stock purchase - ${data['name'] ?? ingredientId}',
+        'amount': totalCost, 'type': 'purchase', 'category': 'Inventory',
+        'ingredientId': ingredientId, 'quantity': quantity,
+        'unit': data['baseUnit'] ?? 'g',
+        'createdAt': Timestamp.fromDate(DateTime.now()),
+        'notes': 'Added from Inventory',
+      });
     });
   }
 }
