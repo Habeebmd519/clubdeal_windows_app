@@ -21,8 +21,7 @@ class _ExpensePageState extends State<ExpensePage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        final from = DateTime.now().subtract(const Duration(days: 30));
-        context.read<ExpenseBloc>().add(WatchExpenses(DateTime(from.year, from.month, from.day)));
+        context.read<ExpenseBloc>().add(WatchExpenses(DateTime(2000, 1, 1)));
       }
     });
   }
@@ -36,7 +35,7 @@ class _ExpensePageState extends State<ExpensePage> {
   Future<void> _pickDay() async {
     final picked = await showDatePicker(
       context: context, initialDate: _selectedDay,
-      firstDate: DateTime.now().subtract(const Duration(days: 30)),
+      firstDate: DateTime(2000, 1, 1),
       lastDate: DateTime.now(),
     );
     if (picked != null) setState(() => _selectedDay = picked);
@@ -68,7 +67,7 @@ class _ExpensePageState extends State<ExpensePage> {
             if (state.error != null)
               MaterialBanner(
                 content: Text('Could not load/save expenses: ${state.error}'),
-                actions: [TextButton(onPressed: () => context.read<ExpenseBloc>().add(WatchExpenses(DateTime.now().subtract(const Duration(days: 30)))), child: const Text('Retry'))],
+                actions: [TextButton(onPressed: () => context.read<ExpenseBloc>().add(WatchExpenses(DateTime(2000, 1, 1))), child: const Text('Retry'))],
               ),
             Row(children: [
               Expanded(child: _SummaryCard(title: 'Selected day total', value: formatInr(total), icon: Icons.payments_outlined)),

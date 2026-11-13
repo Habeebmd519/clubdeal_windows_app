@@ -36,6 +36,36 @@ class _InventoryPageState extends State<InventoryPage> {
     return null;
   }
 
+  Future<void> _createIngredient() async {
+    final name = TextEditingController();
+    final unit = TextEditingController(text: 'g');
+    final category = TextEditingController(text: 'Food');
+    final form = GlobalKey<FormState>();
+    final saved = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('Add ingredient'),
+      content: SizedBox(width: 420, child: Form(key: form, child: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextFormField(controller: name, autofocus: true, decoration: const InputDecoration(labelText: 'Ingredient name', hintText: 'Chicken, maida, oil...'), validator: (v) => v == null || v.trim().isEmpty ? 'Enter a name' : null),
+        const SizedBox(height: 8),
+        TextFormField(controller: unit, decoration: const InputDecoration(labelText: 'Stock unit', hintText: 'g, ml, pcs, kg'), validator: (v) => v == null || v.trim().isEmpty ? 'Enter a unit' : null),
+        const SizedBox(height: 8),
+        TextFormField(controller: category, decoration: const InputDecoration(labelText: 'Ingredient category')),
+      ]))),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, form.currentState?.validate() ?? false), child: const Text('Add ingredient')),
+      ],
+    ));
+    if (saved == true) {
+      try {
+        await _repository.createIngredient(name: name.text, unit: unit.text.trim(), category: category.text.trim().isEmpty ? 'General' : category.text.trim());
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${name.text.trim()} added to ingredient list.')));
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not add ingredient: $e')));
+      }
+    }
+    name.dispose(); unit.dispose(); category.dispose();
+  }
+
   Future<void> _openingStock() async {
     final chicken = TextEditingController(text: (_find('chicken')?.stockQuantity ?? 0).toStringAsFixed(0));
     final fries = TextEditingController(text: (_find('fries')?.stockQuantity ?? 0).toStringAsFixed(0));
@@ -96,7 +126,11 @@ class _InventoryPageState extends State<InventoryPage> {
       Row(children:[const Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
         Text('Inventory',style:TextStyle(fontSize:26,fontWeight:FontWeight.w800)),
         SizedBox(height:4),Text('Opening stock, purchases and current ingredient balances'),
-      ])),FilledButton.icon(onPressed:_openingStock,icon:const Icon(Icons.inventory_2_outlined),label:const Text('Set Opening Stock'))]),
+      ])),
+        OutlinedButton.icon(onPressed: _createIngredient, icon: const Icon(Icons.add), label: const Text('Add Ingredient')),
+        const SizedBox(width: 8),
+        FilledButton.icon(onPressed:_openingStock,icon:const Icon(Icons.inventory_2_outlined),label:const Text('Set Opening Stock'))
+      ]),
       const SizedBox(height:18),
       Row(children:[
         Expanded(child:_StockCard(name:'Chicken',item:chicken,onAdd:chicken==null?null:()=>_addStock(chicken))),

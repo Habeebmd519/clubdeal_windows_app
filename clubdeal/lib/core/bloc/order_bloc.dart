@@ -70,6 +70,16 @@ class OrderBloc extends Bloc<OrderEvent, OrderState> {
       final newlyCreated = incoming.where((order) => !_knownOrderIds.contains(order.id)).toList();
       if (newlyCreated.isNotEmpty) {
         unawaited(alertSoundService?.playNewOrder() ?? Future<void>.value());
+        // Reserve recipe ingredients as soon as a new order reaches this device.
+        // The repository transaction is idempotent, so Firestore retries or
+        // repeated snapshots cannot deduct the same order twice.
+        for (final order in newlyCreated) {
+          if (order.status != OrderStatus.cancelled && order.status != OrderStatus.delivered) {
+            unawaited(repository.reserveOrderInventory(order.id).catchError((Object error) {
+              add(_OrdersFailed('Stock reservation failed for order ${order.id}: $error'));
+            }));
+          }
+        }
       }
       final printer = printerService;
       if (printer != null && printer.autoPrintNewOrders) {
@@ -79,6 +89,15 @@ class OrderBloc extends Bloc<OrderEvent, OrderState> {
       }
     } else {
       _receivedInitialSnapshot = true;
+    }
+    // Also reconcile active orders already in Firestore when the desktop
+    // starts or reconnects. Reservation is transactionally idempotent.
+    for (final order in incoming) {
+      if (order.status != OrderStatus.cancelled && order.status != OrderStatus.delivered) {
+        unawaited(repository.reserveOrderInventory(order.id).catchError((Object error) {
+          add(_OrdersFailed('Stock reservation failed for order ${order.id}: $error'));
+        }));
+      }
     }
     _knownOrderIds..clear()..addAll(incoming.map((order) => order.id));
     emit(OrderState(orders: incoming, loading: false));
@@ -95,11 +114,24 @@ class OrderBloc extends Bloc<OrderEvent, OrderState> {
   Future<void> _cancel(OrderCancelled event, Emitter<OrderState> emit) async {
     try {
       await repository.cancelOrder(event.orderId, event.reason);
-      final printer = printerService;
       RestaurantOrder? order;
       for (final candidate in state.orders) {
         if (candidate.id == event.orderId) { order = candidate; break; }
       }
+      // Move it into the cancelled filter immediately; do not wait for the
+      // Firestore listener round-trip to repaint the list.
+      if (order != null) {
+        final cancelled = RestaurantOrder(
+          id: order.id, customerName: order.customerName, phone: order.phone,
+          table: order.table, items: order.items, total: order.total,
+          status: OrderStatus.cancelled, note: order.note, source: order.source,
+          createdAt: order.createdAt, paymentMethod: order.paymentMethod,
+          deliveredAt: order.deliveredAt, cancelledAt: DateTime.now(),
+          cancelReason: event.reason,
+        );
+        emit(state.copyWith(orders: state.orders.map((item) => item.id == event.orderId ? cancelled : item).toList()));
+      }
+      final printer = printerService;
       if (printer != null && order != null) {
         try { await printer.printCancellationTicket(order, event.reason); } catch (_) {}
       }
