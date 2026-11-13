@@ -6,56 +6,83 @@ import '../models/stock_movement_model.dart';
 
 class InventoryRepository {
   InventoryRepository(this._db);
+
   final FirebaseFirestore _db;
+
   CollectionReference<Map<String, dynamic>> get _ingredients =>
-      _db.collection('stock');
+      _db.collection('ingredients');
+
   CollectionReference<Map<String, dynamic>> get _recipes =>
       _db.collection('menu_recipes');
+
   CollectionReference<Map<String, dynamic>> get _movements =>
       _db.collection('stock_movements');
 
-  Stream<List<Ingredient>> watchIngredients() => _ingredients
-      .orderBy('name')
-      .snapshots()
-      .map(
-        (s) => s.docs.map((d) => Ingredient.fromMap(d.id, d.data())).toList(),
-      );
+  // WATCH ALL STOCK ITEMS
+  Stream<List<Ingredient>> watchIngredients() {
+    return _ingredients
+        .orderBy('name')
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => Ingredient.fromMap(doc.id, doc.data()))
+              .toList(),
+        );
+  }
 
+  // WATCH STOCK MOVEMENTS
   Stream<List<StockMovement>> watchMovements({String? ingredientId}) {
-    Query<Map<String, dynamic>> q = _movements
+    Query<Map<String, dynamic>> query = _movements
         .orderBy('createdAt', descending: true)
         .limit(500);
-    if (ingredientId != null)
-      q = q.where('ingredientId', isEqualTo: ingredientId);
-    return q.snapshots().map(
-      (s) => s.docs.map((d) => StockMovement.fromMap(d.id, d.data())).toList(),
+
+    if (ingredientId != null) {
+      query = query.where('ingredientId', isEqualTo: ingredientId);
+    }
+
+    return query.snapshots().map(
+      (snapshot) => snapshot.docs
+          .map((doc) => StockMovement.fromMap(doc.id, doc.data()))
+          .toList(),
     );
   }
 
+  // SAVE INGREDIENT
   Future<void> saveIngredient(Ingredient item) async {
     await _ingredients.doc(item.id).set(item.toMap(), SetOptions(merge: true));
   }
 
+  // CREATE INGREDIENT
   Future<void> createIngredient({
     required String name,
     required String unit,
     required String category,
     double lowStockThreshold = 0,
   }) async {
-    final clean = name.trim();
-    if (clean.isEmpty) throw ArgumentError('Ingredient name is required.');
-    final id = clean
+    final cleanName = name.trim();
+
+    if (cleanName.isEmpty) {
+      throw ArgumentError('Ingredient name is required.');
+    }
+
+    final id = cleanName
         .toLowerCase()
         .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
         .replaceAll(RegExp(r'^_|_$'), '');
-    if (id.isEmpty)
+
+    if (id.isEmpty) {
       throw ArgumentError('Use a name containing letters or numbers.');
-    final ref = _ingredients.doc(id);
-    final existing = await ref.get();
-    if (existing.exists)
+    }
+
+    final ingredientRef = _ingredients.doc(id);
+    final existing = await ingredientRef.get();
+
+    if (existing.exists) {
       throw StateError('An ingredient with this name already exists.');
-    await ref.set({
-      'name': clean,
+    }
+
+    await ingredientRef.set({
+      'name': cleanName,
       'baseUnit': unit,
       'stockQuantity': 0.0,
       'averageUnitCost': 0.0,
@@ -65,26 +92,38 @@ class InventoryRepository {
     });
   }
 
-  Future<void> saveRecipe(MenuRecipe recipe) => _recipes
-      .doc(recipe.menuItemId)
-      .set(recipe.toMap(), SetOptions(merge: true));
-
-  Future<MenuRecipe?> getRecipe(String menuItemId) async {
-    final d = await _recipes.doc(menuItemId).get();
-    return d.exists ? MenuRecipe.fromMap(d.id, d.data()!) : null;
+  // SAVE MENU RECIPE
+  Future<void> saveRecipe(MenuRecipe recipe) async {
+    await _recipes
+        .doc(recipe.menuItemId)
+        .set(recipe.toMap(), SetOptions(merge: true));
   }
 
+  // GET MENU RECIPE
+  Future<MenuRecipe?> getRecipe(String menuItemId) async {
+    final doc = await _recipes.doc(menuItemId).get();
+
+    if (!doc.exists) return null;
+
+    return MenuRecipe.fromMap(doc.id, doc.data()!);
+  }
+
+  // SET OPENING STOCK
   Future<void> setOpeningStock({
     required String ingredientId,
     required String name,
     required String unit,
     required double quantity,
   }) async {
-    if (quantity < 0) throw ArgumentError('Opening stock cannot be negative.');
-    final ingredient = _ingredients.doc(ingredientId);
-    final movement = _movements.doc();
-    await _db.runTransaction((tx) async {
-      tx.set(ingredient, {
+    if (quantity < 0) {
+      throw ArgumentError('Opening stock cannot be negative.');
+    }
+
+    final ingredientRef = _ingredients.doc(ingredientId);
+    final movementRef = _movements.doc();
+
+    await _db.runTransaction((transaction) async {
+      transaction.set(ingredientRef, {
         'name': name,
         'baseUnit': unit,
         'stockQuantity': quantity,
@@ -92,10 +131,11 @@ class InventoryRepository {
         'openingStock': quantity,
         'openingAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
-      tx.set(
-        movement,
+
+      transaction.set(
+        movementRef,
         StockMovement(
-          id: movement.id,
+          id: movementRef.id,
           ingredientId: ingredientId,
           type: StockMovementType.adjustment,
           quantity: quantity,
@@ -106,13 +146,16 @@ class InventoryRepository {
     });
   }
 
+  // ADD STOCK
   Future<void> addStock({
     required String ingredientId,
     required double quantity,
     required double totalCost,
   }) async {
-    if (quantity <= 0 || totalCost < 0)
+    if (quantity <= 0 || totalCost < 0) {
       throw ArgumentError('Enter a valid quantity and cost.');
+    }
+
     await recordPurchase(
       ingredientId: ingredientId,
       quantity: quantity,
@@ -121,33 +164,8 @@ class InventoryRepository {
     );
   }
 
-<<<<<<< HEAD
-  Future<void> recordPurchase({required String ingredientId, required double quantity,
-    required double totalCost, required String movementId, String supplier = '', String notes = ''}) async {
-=======
+  // RECORD STOCK PURCHASE + AUTOMATIC EXPENSE
   Future<void> recordPurchase({
-    required String ingredientId,
-    required double quantity,
-    required double totalCost,
-    required String movementId,
-  }) async {
->>>>>>> fc4101c (all again set)
-    final ref = _ingredients.doc(ingredientId);
-    final movement = _movements.doc(movementId);
-    final expense = _db.collection('expenses').doc();
-    await _db.runTransaction((tx) async {
-      final snap = await tx.get(ref);
-      if (!snap.exists)
-        throw StateError('Ingredient not found. Create it first.');
-      final data = snap.data()!;
-      final oldQty = (data['stockQuantity'] as num? ?? 0).toDouble();
-      final oldCost = (data['averageUnitCost'] as num? ?? 0).toDouble();
-      final nextQty = oldQty + quantity;
-      final average = nextQty <= 0
-          ? 0
-          : ((oldQty * oldCost) + totalCost) / nextQty;
-      tx.update(ref, {'stockQuantity': nextQty, 'averageUnitCost': average});
-<<<<<<< H  Future<void> recordPurchase({
     required String ingredientId,
     required double quantity,
     required double totalCost,
@@ -161,48 +179,50 @@ class InventoryRepository {
     }
 
     final purchaseDate = purchasedAt ?? DateTime.now();
-    final ref = _ingredients.doc(ingredientId);
-    final movement = _movements.doc(movementId);
-    final expense = _db.collection('expenses').doc();
 
-    await _db.runTransaction((tx) async {
-      final snap = await tx.get(ref);
+    final ingredientRef = _ingredients.doc(ingredientId);
+    final movementRef = _movements.doc(movementId);
+    final expenseRef = _db.collection('expenses').doc();
 
-      if (!snap.exists) {
+    await _db.runTransaction((transaction) async {
+      final snapshot = await transaction.get(ingredientRef);
+
+      if (!snapshot.exists) {
         throw StateError('Ingredient not found. Create it first.');
       }
 
-      final data = snap.data()!;
-      final oldQty = (data['stockQuantity'] as num? ?? 0).toDouble();
-      final oldCost = (data['averageUnitCost'] as num? ?? 0).toDouble();
-      final nextQty = oldQty + quantity;
+      final data = snapshot.data()!;
 
-      final average = nextQty <= 0
-          ? 0
-          : ((oldQty * oldCost) + totalCost) / nextQty;
+      final oldQuantity = (data['stockQuantity'] as num? ?? 0).toDouble();
 
-      tx.update(ref, {
-        'stockQuantity': nextQty,
-        'averageUnitCost': average,
+      final oldAverageCost = (data['averageUnitCost'] as num? ?? 0).toDouble();
+
+      final newQuantity = oldQuantity + quantity;
+
+      final newAverageCost =
+          ((oldQuantity * oldAverageCost) + totalCost) / newQuantity;
+
+      // UPDATE STOCK
+      transaction.update(ingredientRef, {
+        'stockQuantity': newQuantity,
+        'averageUnitCost': newAverageCost,
       });
 
-      tx.set(
-        movement,
+      // SAVE STOCK MOVEMENT
+      transaction.set(
+        movementRef,
         StockMovement(
-          id: movement.id,
+          id: movementRef.id,
           ingredientId: ingredientId,
           type: StockMovementType.purchase,
           quantity: quantity,
           unitCost: totalCost / quantity,
           createdAt: purchaseDate,
-        ).toMap()
-          ..addAll({
-            'supplier': supplier,
-            'note': notes,
-          }),
+        ).toMap()..addAll({'supplier': supplier, 'note': notes}),
       );
 
-      tx.set(expense, {
+      // AUTOMATICALLY CREATE EXPENSE
+      transaction.set(expenseRef, {
         'title': 'Purchase (${data['name'] ?? ingredientId})',
         'amount': totalCost,
         'type': 'purchase',
@@ -216,29 +236,95 @@ class InventoryRepository {
       });
     });
   }
-    final ref = _ingredients.doc(ingredientId);
-    final movement = _movements.doc();
-    await _db.runTransaction((tx) async {
-      final snap = await tx.get(ref);
-      if (!snap.exists) throw StateError('Ingredient not found.');
-      final old = (snap.data()?['stockQuantity'] as num? ?? 0).toDouble();
-      final delta = countedQuantity - old;
-      tx.update(ref, {
+
+  // CONSUME STOCK
+  Future<void> consumeStock({
+    required String ingredientId,
+    required double quantity,
+    required String reason,
+  }) async {
+    if (quantity <= 0) {
+      throw ArgumentError('Quantity must be above zero.');
+    }
+
+    final ingredientRef = _ingredients.doc(ingredientId);
+    final movementRef = _movements.doc();
+
+    await _db.runTransaction((transaction) async {
+      final snapshot = await transaction.get(ingredientRef);
+
+      if (!snapshot.exists) {
+        throw StateError('Stock item not found.');
+      }
+
+      final oldQuantity = (snapshot.data()?['stockQuantity'] as num? ?? 0)
+          .toDouble();
+
+      if (quantity > oldQuantity) {
+        throw StateError('Not enough stock. Available: $oldQuantity.');
+      }
+
+      final remainingQuantity = oldQuantity - quantity;
+
+      transaction.update(ingredientRef, {'stockQuantity': remainingQuantity});
+
+      transaction.set(
+        movementRef,
+        StockMovement(
+            id: movementRef.id,
+            ingredientId: ingredientId,
+            type: StockMovementType.consumption,
+            quantity: quantity,
+            unitCost: 0,
+            createdAt: DateTime.now(),
+          ).toMap()
+          ..addAll({'reason': reason, 'balanceAfter': remainingQuantity}),
+      );
+    });
+  }
+
+  // ADJUST STOCK
+  Future<void> adjustStock({
+    required String ingredientId,
+    required double countedQuantity,
+    required String reason,
+  }) async {
+    if (countedQuantity < 0 || reason.trim().isEmpty) {
+      throw ArgumentError('Enter a valid count and reason.');
+    }
+
+    final ingredientRef = _ingredients.doc(ingredientId);
+    final movementRef = _movements.doc();
+
+    await _db.runTransaction((transaction) async {
+      final snapshot = await transaction.get(ingredientRef);
+
+      if (!snapshot.exists) {
+        throw StateError('Ingredient not found.');
+      }
+
+      final oldQuantity = (snapshot.data()?['stockQuantity'] as num? ?? 0)
+          .toDouble();
+
+      final difference = countedQuantity - oldQuantity;
+
+      transaction.update(ingredientRef, {
         'stockQuantity': countedQuantity,
         'lastCountAt': FieldValue.serverTimestamp(),
       });
-      tx.set(
-        movement,
+
+      transaction.set(
+        movementRef,
         StockMovement(
-          id: movement.id,
+          id: movementRef.id,
           ingredientId: ingredientId,
           type: StockMovementType.adjustment,
-          quantity: delta.abs(),
+          quantity: difference.abs(),
           unitCost: 0,
           createdAt: DateTime.now(),
         ).toMap()..addAll({
           'reason': reason.trim(),
-          'direction': delta >= 0 ? 'in' : 'out',
+          'direction': difference >= 0 ? 'in' : 'out',
           'balanceAfter': countedQuantity,
         }),
       );
