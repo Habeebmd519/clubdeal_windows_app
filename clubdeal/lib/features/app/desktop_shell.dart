@@ -93,27 +93,37 @@ class _Sidebar extends StatelessWidget {
       children: [
         const SizedBox(height: 24),
         const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 18),
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 0),
           child: Row(
             children: [
-              CircleAvatar(
-                backgroundColor: Colors.transparent,
-                child: Image(image: AssetImage('assets/icon/appLogo.png')),
-              ),
-              SizedBox(width: 10),
-              Text(
-                'CLUB DEAL',
-                style: TextStyle(
-                  color: AppColors.cream,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.2,
+              SizedBox(
+                width: 36,
+                height: 36,
+                child: Image(
+                  image: AssetImage('assets/icon/appLogo.png'),
+                  fit: BoxFit.contain,
                 ),
               ),
-              const CafeStatusWidget(),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'CLUB DEAL',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: AppColors.cream,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
             ],
           ),
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 14),
+        const CafeStatusWidget(),
+        const SizedBox(height: 20),
         _item(
           context,
           Icons.dashboard_outlined,
