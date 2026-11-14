@@ -83,16 +83,22 @@ class _AddStockFormState extends State<AddStockForm> {
 
 class PurchaseStockForm extends StatefulWidget {
   const PurchaseStockForm({super.key});
+
   @override
   State<PurchaseStockForm> createState() => _PurchaseStockFormState();
 }
 
 class _PurchaseStockFormState extends State<PurchaseStockForm> {
   String? stockId;
-  final qty = TextEditingController(),
-      price = TextEditingController(),
-      supplier = TextEditingController(),
-      note = TextEditingController();
+  bool submitting = false;
+
+  final qty = TextEditingController();
+  final price = TextEditingController();
+  final supplier = TextEditingController();
+  final note = TextEditingController();
+
+  final formKey = GlobalKey<FormState>();
+
   double number(TextEditingController c) => double.tryParse(c.text.trim()) ?? 0;
 
   @override
@@ -104,59 +110,146 @@ class _PurchaseStockFormState extends State<PurchaseStockForm> {
     super.dispose();
   }
 
+  void _submit() {
+    if (!formKey.currentState!.validate()) return;
+
+    if (stockId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a stock item.')),
+      );
+      return;
+    }
+
+    setState(() => submitting = true);
+
+    context.read<StockBloc>().add(
+      PurchaseStock(
+        stockId: stockId!,
+        quantity: number(qty),
+        unitPrice: number(price),
+        supplier: supplier.text.trim(),
+        note: note.text.trim(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final stocks = context.watch<StockBloc>().state.items;
-    return AlertDialog(
-      title: const Text('Purchase Stock'),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<String>(
-              value: stockId,
-              decoration: const InputDecoration(labelText: 'Stock item'),
-              items: stocks
-                  .map(
-                    (s) => DropdownMenuItem(
+    return BlocListener<StockBloc, StockState>(
+      listenWhen: (previous, current) =>
+          current.error != null ||
+          current.transactions.length > previous.transactions.length,
+      listener: (context, state) {
+        if (state.error != null) {
+          setState(() => submitting = false);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Purchase failed: ${state.error}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+
+        if (state.transactions.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Stock purchase recorded successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.of(context).pop();
+        }
+      },
+      child: AlertDialog(
+        title: const Text('Purchase Stock'),
+        content: SizedBox(
+          width: 420,
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  value: stockId,
+                  decoration: const InputDecoration(labelText: 'Stock item'),
+                  items: context.watch<StockBloc>().state.items.map((s) {
+                    return DropdownMenuItem(
                       value: s.id,
                       child: Text('${s.name} (${s.quantity} ${s.unit})'),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) => setState(() => stockId = v),
+                    );
+                  }).toList(),
+                  onChanged: submitting
+                      ? null
+                      : (value) => setState(() => stockId = value),
+                  validator: (value) =>
+                      value == null ? 'Select a stock item' : null,
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: qty,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Purchased quantity',
+                  ),
+                  validator: (value) {
+                    final n = double.tryParse(value ?? '');
+                    return n == null || n <= 0
+                        ? 'Enter a quantity above zero'
+                        : null;
+                  },
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: price,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Unit purchase price (₹)',
+                  ),
+                  validator: (value) {
+                    final n = double.tryParse(value ?? '');
+                    return n == null || n < 0 ? 'Enter a valid price' : null;
+                  },
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: supplier,
+                  decoration: const InputDecoration(labelText: 'Supplier'),
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: note,
+                  decoration: const InputDecoration(
+                    labelText: 'Note / invoice reference',
+                  ),
+                ),
+              ],
             ),
-            _field(qty, 'Purchased quantity', numeric: true),
-            _field(price, 'Unit purchase price (₹)', numeric: true),
-            _field(supplier, 'Supplier'),
-            _field(note, 'Note / invoice reference'),
-          ],
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: submitting ? null : () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: submitting ? null : _submit,
+            icon: submitting
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.add),
+            label: Text(submitting ? 'Saving...' : 'Add Purchase'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: stockId == null || number(qty) <= 0
-              ? null
-              : () {
-                  context.read<StockBloc>().add(
-                    PurchaseStock(
-                      stockId: stockId!,
-                      quantity: number(qty),
-                      unitPrice: number(price),
-                      supplier: supplier.text,
-                      note: note.text,
-                    ),
-                  );
-                  Navigator.pop(context);
-                },
-          child: const Text('Add Purchase'),
-        ),
-      ],
     );
   }
 }
