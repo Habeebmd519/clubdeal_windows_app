@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/bloc/menu_bloc.dart';
 import '../../core/models/menu_item.dart';
-import '../../core/repositories/restaurant_repository.dart';
+import '../../core/models/ingredient_model.dart';
+import '../../core/repositories/inventory_repository.dart';
+// import '../../core/repositories/restaurant_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/desktop_widgets.dart';
 
@@ -62,31 +65,27 @@ class _MenuPageState extends State<MenuPage> {
                 child: state.loading
                     ? const Center(child: CircularProgressIndicator())
                     : items.isEmpty
-                        ? const EmptyPanel(
-                            title: 'No menu items',
-                            message: 'Add your first item.',
-                          )
-                        : ListView.separated(
-                            itemCount: items.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 6),
-                            itemBuilder: (_, index) {
-                              final item = items[index];
-                              return _MenuRow(
-                                item: item,
-                                onEdit: () => _editItem(context, item),
-                                onDelete: () => _delete(context, item),
-                                onAvailability: (value) {
-                                  context.read<MenuBloc>().add(
-                                        MenuAvailabilityChanged(
-                                          item.id,
-                                          value,
-                                        ),
-                                      );
-                                },
+                    ? const EmptyPanel(
+                        title: 'No menu items',
+                        message: 'Add your first item.',
+                      )
+                    : ListView.separated(
+                        itemCount: items.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 6),
+                        itemBuilder: (_, index) {
+                          final item = items[index];
+                          return _MenuRow(
+                            item: item,
+                            onEdit: () => _editItem(context, item),
+                            onDelete: () => _delete(context, item),
+                            onAvailability: (value) {
+                              context.read<MenuBloc>().add(
+                                MenuAvailabilityChanged(item.id, value),
                               );
                             },
-                          ),
+                          );
+                        },
+                      ),
               ),
             ],
           ),
@@ -95,10 +94,7 @@ class _MenuPageState extends State<MenuPage> {
     );
   }
 
-  Future<void> _delete(
-    BuildContext context,
-    MenuItemModel item,
-  ) async {
+  Future<void> _delete(BuildContext context, MenuItemModel item) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -122,10 +118,7 @@ class _MenuPageState extends State<MenuPage> {
     }
   }
 
-  Future<void> _editItem(
-    BuildContext context, [
-    MenuItemModel? old,
-  ]) async {
+  Future<void> _editItem(BuildContext context, [MenuItemModel? old]) async {
     final name = TextEditingController(text: old?.name ?? '');
     final price = TextEditingController(
       text: old == null ? '' : old.price.toString(),
@@ -134,8 +127,12 @@ class _MenuPageState extends State<MenuPage> {
     final description = TextEditingController(text: old?.description ?? '');
     final emoji = TextEditingController(text: old?.emoji ?? '🍽️');
     final tag = TextEditingController(text: old?.tag ?? '');
-    final chickenGrams = TextEditingController(text: (old?.chickenGrams ?? 0).toString());
-    final friesGrams = TextEditingController(text: (old?.friesGrams ?? 0).toString());
+    final recipeQuantities = <String, double>{};
+    for (final line in old?.recipeLines ?? const <Map<String, dynamic>>[]) {
+      final id = (line['ingredientId'] ?? '').toString();
+      final quantity = (line['quantity'] as num?)?.toDouble() ?? 0;
+      if (id.isNotEmpty && quantity > 0) recipeQuantities[id] = quantity;
+    }
     bool available = old?.isAvailable ?? true;
 
     await showDialog<void>(
@@ -152,9 +149,7 @@ class _MenuPageState extends State<MenuPage> {
                     children: [
                       TextField(
                         controller: name,
-                        decoration: const InputDecoration(
-                          labelText: 'Name',
-                        ),
+                        decoration: const InputDecoration(labelText: 'Name'),
                       ),
                       const SizedBox(height: 8),
                       Row(
@@ -164,8 +159,8 @@ class _MenuPageState extends State<MenuPage> {
                               controller: price,
                               keyboardType:
                                   const TextInputType.numberWithOptions(
-                                decimal: true,
-                              ),
+                                    decimal: true,
+                                  ),
                               decoration: const InputDecoration(
                                 labelText: 'Price',
                                 prefixText: '₹ ',
@@ -215,23 +210,156 @@ class _MenuPageState extends State<MenuPage> {
                       const SizedBox(height: 16),
                       Align(
                         alignment: Alignment.centerLeft,
-                        child: Text('Expenses / Ingredient Usage',
-                          style: Theme.of(context).textTheme.titleMedium),
+                        child: Text(
+                          'Recipe / Ingredients per item',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Choose ingredients already added in Inventory and enter the quantity used for ONE menu item.',
+                          style: TextStyle(fontSize: 11, color: Colors.white60),
+                        ),
                       ),
                       const SizedBox(height: 8),
-                      Row(children: [
-                        Expanded(child: TextField(
-                          controller: chickenGrams,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          decoration: const InputDecoration(labelText: 'Chicken (grams)', hintText: '0'),
-                        )),
-                        const SizedBox(width: 10),
-                        Expanded(child: TextField(
-                          controller: friesGrams,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          decoration: const InputDecoration(labelText: 'Fries (grams)', hintText: '0'),
-                        )),
-                      ]),
+                      StreamBuilder<List<Ingredient>>(
+                        stream: InventoryRepository(FirebaseFirestore.instance)
+                            .watchIngredients(),
+                        builder: (context, ingredientSnapshot) {
+                          final ingredients =
+                              ingredientSnapshot.data ?? const <Ingredient>[];
+                          final selectedIds = recipeQuantities.keys.toList();
+                          return Column(
+                            children: [
+                              if (ingredientSnapshot.hasError)
+                                Text(
+                                  'Could not load ingredients: ${ingredientSnapshot.error}',
+                                ),
+                              if (ingredients.isEmpty &&
+                                  !ingredientSnapshot.hasError)
+                                const Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    'Add ingredients in Inventory first.',
+                                    style: TextStyle(
+                                      color: Colors.orange,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ...selectedIds.map((id) {
+                                final selected = ingredients
+                                    .where((i) => i.id == id)
+                                    .toList();
+                                final current = selected.isEmpty
+                                    ? null
+                                    : selected.first;
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        flex: 3,
+                                        child: DropdownButtonFormField<String>(
+                                          value: current?.id,
+                                          isExpanded: true,
+                                          decoration: const InputDecoration(
+                                            labelText: 'Ingredient',
+                                          ),
+                                          items: ingredients
+                                              .map(
+                                                (
+                                                  ingredient,
+                                                ) => DropdownMenuItem(
+                                                  value: ingredient.id,
+                                                  child: Text(
+                                                    '${ingredient.name} (${ingredient.baseUnit})',
+                                                  ),
+                                                ),
+                                              )
+                                              .toList(),
+                                          onChanged: (value) {
+                                            if (value == null || value == id)
+                                              return;
+                                            setDialogState(() {
+                                              final quantity =
+                                                  recipeQuantities.remove(id) ??
+                                                  0;
+                                              recipeQuantities[value] =
+                                                  quantity;
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        flex: 2,
+                                        child: TextFormField(
+                                          key: ValueKey(
+                                            'recipe-$id-${recipeQuantities[id]}',
+                                          ),
+                                          initialValue: recipeQuantities[id]!
+                                              .toString(),
+                                          keyboardType:
+                                              const TextInputType.numberWithOptions(
+                                                decimal: true,
+                                              ),
+                                          decoration: InputDecoration(
+                                            labelText: 'Qty per item',
+                                            suffixText: current?.baseUnit ?? '',
+                                          ),
+                                          onChanged: (value) {
+                                            final quantity = double.tryParse(
+                                              value,
+                                            );
+                                            if (quantity != null &&
+                                                quantity >= 0)
+                                              recipeQuantities[id] = quantity;
+                                          },
+                                        ),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Remove ingredient',
+                                        onPressed: () => setDialogState(
+                                          () => recipeQuantities.remove(id),
+                                        ),
+                                        icon: const Icon(
+                                          Icons.remove_circle_outline,
+                                          color: Colors.redAccent,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: OutlinedButton.icon(
+                                  onPressed:
+                                      ingredients.isEmpty ||
+                                          ingredients.every(
+                                            (i) => recipeQuantities.containsKey(
+                                              i.id,
+                                            ),
+                                          )
+                                      ? null
+                                      : () => setDialogState(() {
+                                          final next = ingredients.firstWhere(
+                                            (i) => !recipeQuantities
+                                                .containsKey(i.id),
+                                          );
+                                          recipeQuantities[next.id] = 0;
+                                        }),
+                                  icon: const Icon(Icons.add, size: 16),
+                                  label: const Text('Add Ingredient'),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                       const SizedBox(height: 8),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
@@ -253,12 +381,13 @@ class _MenuPageState extends State<MenuPage> {
                 FilledButton(
                   onPressed: () async {
                     final itemName = name.text.trim();
-                    final itemPrice =
-                        double.tryParse(price.text.trim()) ?? 0;
+                    final itemPrice = double.tryParse(price.text.trim()) ?? 0;
 
-                    final chicken = double.tryParse(chickenGrams.text.trim()) ?? -1;
-                    final fries = double.tryParse(friesGrams.text.trim()) ?? -1;
-                    if (itemName.isEmpty || itemPrice <= 0 || chicken < 0 || fries < 0) {
+                    if (itemName.isEmpty ||
+                        itemPrice <= 0 ||
+                        recipeQuantities.values.any(
+                          (quantity) => quantity < 0,
+                        )) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Enter a valid name and price.'),
@@ -267,23 +396,27 @@ class _MenuPageState extends State<MenuPage> {
                       return;
                     }
 
-                    await context
-                        .read<MenuBloc>()
-                        .repository
-                        .saveMenuItem(
-                          id: old?.id,
-                          name: itemName,
-                          price: itemPrice,
-                          category: category.text.trim().isEmpty
-                              ? 'Other'
-                              : category.text.trim(),
-                          description: description.text.trim(),
-                          emoji: emoji.text.trim(),
-                          tag: tag.text.trim(),
-                          isAvailable: available,
-                          chickenGrams: chicken,
-                          friesGrams: fries,
-                        );
+                    await context.read<MenuBloc>().repository.saveMenuItem(
+                      id: old?.id,
+                      name: itemName,
+                      price: itemPrice,
+                      category: category.text.trim().isEmpty
+                          ? 'Other'
+                          : category.text.trim(),
+                      description: description.text.trim(),
+                      emoji: emoji.text.trim(),
+                      tag: tag.text.trim(),
+                      isAvailable: available,
+                      recipeLines: recipeQuantities.entries
+                          .where((entry) => entry.value > 0)
+                          .map(
+                            (entry) => {
+                              'ingredientId': entry.key,
+                              'quantity': entry.value,
+                            },
+                          )
+                          .toList(),
+                    );
 
                     if (dialogContext.mounted) {
                       Navigator.pop(dialogContext);
@@ -304,8 +437,6 @@ class _MenuPageState extends State<MenuPage> {
     description.dispose();
     emoji.dispose();
     tag.dispose();
-    chickenGrams.dispose();
-    friesGrams.dispose();
   }
 }
 
@@ -335,10 +466,7 @@ class _MenuRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 45,
-            child: Text(
-              item.emoji,
-              style: const TextStyle(fontSize: 23),
-            ),
+            child: Text(item.emoji, style: const TextStyle(fontSize: 23)),
           ),
           Expanded(
             flex: 3,
@@ -353,10 +481,7 @@ class _MenuRow extends StatelessWidget {
           Expanded(
             child: Text(
               item.category,
-              style: const TextStyle(
-                color: AppColors.muted,
-                fontSize: 11,
-              ),
+              style: const TextStyle(color: AppColors.muted, fontSize: 11),
             ),
           ),
           SizedBox(
@@ -371,10 +496,7 @@ class _MenuRow extends StatelessWidget {
           ),
           SizedBox(
             width: 100,
-            child: Switch(
-              value: item.isAvailable,
-              onChanged: onAvailability,
-            ),
+            child: Switch(value: item.isAvailable, onChanged: onAvailability),
           ),
           IconButton(
             tooltip: 'Edit',

@@ -1,6 +1,9 @@
 name: Build Windows
 
 on:
+  push:
+    branches:
+      - feature/restaurant-operations
   workflow_dispatch:
 
 jobs:

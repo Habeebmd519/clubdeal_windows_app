@@ -1,3 +1,4 @@
+import 'package:clubdeal/core/bloc/stock_bloc.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -19,13 +20,8 @@ import 'features/theme/app_theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
   final restaurantRepository = RestaurantRepository();
-  final expenseRepository = ExpenseRepository(
-    // Uses the same default Firebase project as the existing menu and orders.
-    FirebaseFirestore.instance,
-  );
-
+  final expenseRepository = ExpenseRepository(FirebaseFirestore.instance);
   runApp(
     MultiRepositoryProvider(
       providers: [
@@ -37,12 +33,36 @@ Future<void> main() async {
       child: MultiBlocProvider(
         providers: [
           BlocProvider(create: (_) => AppBloc()),
-          BlocProvider(create: (context) => OrderBloc(restaurantRepository, printerService: context.read<PrinterService>(), alertSoundService: context.read<AlertSoundService>())..add(const OrdersStarted())),
-          BlocProvider(create: (_) => MenuBloc(restaurantRepository)..add(const MenuStarted())),
-          BlocProvider(create: (_) => ExpenseBloc(expenseRepository)),
           BlocProvider(
-            create: (context) => SettingsBloc(context.read<AlertSoundService>())
-              ..add(const SettingsStarted()),
+            create: (context) => OrderBloc(
+              restaurantRepository,
+              printerService: context.read<PrinterService>(),
+              alertSoundService: context.read<AlertSoundService>(),
+            )..add(const OrdersStarted()),
+          ),
+          BlocProvider(
+            create: (_) =>
+                MenuBloc(restaurantRepository)..add(const MenuStarted()),
+          ),
+          BlocProvider(
+            create: (_) => ExpenseBloc(expenseRepository)
+              ..add(
+                WatchExpenses(
+                  DateTime(
+                    DateTime.now().year,
+                    DateTime.now().month,
+                    DateTime.now().day,
+                  ),
+                ),
+              ),
+          ),
+          BlocProvider(
+            create: (context) =>
+                SettingsBloc(context.read<AlertSoundService>())
+                  ..add(const SettingsStarted()),
+          ),
+          BlocProvider(
+            create: (_) => StockBloc(repository: FirestoreStockRepository(FirebaseFirestore.instance)),
           ),
         ],
         child: const ClubDealDesktopApp(),
@@ -53,14 +73,11 @@ Future<void> main() async {
 
 class ClubDealDesktopApp extends StatelessWidget {
   const ClubDealDesktopApp({super.key});
-
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Club Deal Desktop',
-      theme: AppTheme.dark(),
-      home: const DesktopShell(),
-    );
-  }
+  Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    title: 'Club Deal Desktop',
+    theme: AppTheme.dark(),
+    home: const DesktopShell(),
+  );
 }
