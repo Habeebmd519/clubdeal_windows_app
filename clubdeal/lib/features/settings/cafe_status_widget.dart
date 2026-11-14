@@ -102,11 +102,7 @@ class CafeStatusWidget extends StatelessWidget {
                         color: AppColors.success,
                         onChanged: loading
                             ? null
-                            : (value) {
-                                if (value != null) {
-                                  _updateStatus(context, value);
-                                }
-                              },
+                            : (value) => _updateStatus(context, value),
                       ),
                     ),
                     Expanded(
@@ -143,7 +139,7 @@ class _StatusChoice extends StatelessWidget {
   final bool value;
   final bool groupValue;
   final Color color;
-  final ValueChanged<bool?>? onChanged;
+  final ValueChanged<bool>? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -156,7 +152,11 @@ class _StatusChoice extends StatelessWidget {
           Radio<bool>(
             value: value,
             groupValue: groupValue,
-            onChanged: onChanged,
+            onChanged: onChanged == null
+                ? null
+                : (value) {
+                    if (value != null) onChanged!(value);
+                  },
             activeColor: color,
             visualDensity: const VisualDensity(
               horizontal: VisualDensity.minimumDensity,
