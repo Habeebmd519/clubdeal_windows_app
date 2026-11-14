@@ -102,7 +102,11 @@ class CafeStatusWidget extends StatelessWidget {
                         color: AppColors.success,
                         onChanged: loading
                             ? null
-                            : (value) => _updateStatus(context, value),
+                            : (value) {
+                                if (value != null) {
+                                  _updateStatus(context, value);
+                                }
+                              },
                       ),
                     ),
                     Expanded(
@@ -139,7 +143,7 @@ class _StatusChoice extends StatelessWidget {
   final bool value;
   final bool groupValue;
   final Color color;
-  final ValueChanged<bool>? onChanged;
+  final ValueChanged<bool?>? onChanged;
 
   @override
   Widget build(BuildContext context) {
