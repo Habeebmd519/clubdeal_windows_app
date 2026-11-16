@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/bloc/order_bloc.dart';
+import '../../core/bloc/menu_bloc.dart';
 import '../../core/models/order_model.dart';
 import '../../core/services/printer_service.dart';
 import '../theme/app_theme.dart';
@@ -147,109 +148,193 @@ class _OrderTileState extends State<OrderTile> {
 
   Future<void> _edit() async {
     final order = widget.order;
-    final name = TextEditingController(text: order.customerName),
-        phone = TextEditingController(text: order.phone),
-        table = TextEditingController(text: order.table),
-        note = TextEditingController(text: order.note);
-    final quantities = order.items
-        .map((i) => TextEditingController(text: '${i.qty}'))
-        .toList();
+    final name = TextEditingController(text: order.customerName);
+    final phone = TextEditingController(text: order.phone);
+    final table = TextEditingController(text: order.table);
+    final note = TextEditingController(text: order.note);
     final form = GlobalKey<FormState>();
+    final menuItems = context.read<MenuBloc>().state.items;
+    final editItems = order.items
+        .map((i) => OrderItem(
+              name: i.name,
+              qty: i.qty,
+              price: i.price,
+              emoji: i.emoji,
+              category: i.category,
+            ))
+        .toList();
+    String? selectedMenuId;
+
     final result = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit order'),
-        content: SizedBox(
-          width: 500,
-          child: Form(
-            key: form,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: name,
-                    decoration: const InputDecoration(
-                      labelText: 'Customer name',
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Edit order'),
+          content: SizedBox(
+            width: 620,
+            child: Form(
+              key: form,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: name,
+                      decoration:
+                          const InputDecoration(labelText: 'Customer name'),
+                      validator: (v) => v == null || v.trim().isEmpty
+                          ? 'Enter a name'
+                          : null,
                     ),
-                    validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Enter a name' : null,
-                  ),
-                  TextFormField(
-                    controller: phone,
-                    decoration: const InputDecoration(labelText: 'Phone'),
-                  ),
-                  TextFormField(
-                    controller: table,
-                    decoration: const InputDecoration(
-                      labelText: 'Table / token',
+                    TextFormField(
+                      controller: phone,
+                      decoration: const InputDecoration(labelText: 'Phone'),
                     ),
-                  ),
-                  TextFormField(
-                    controller: note,
-                    decoration: const InputDecoration(labelText: 'Order note'),
-                  ),
-                  const Divider(height: 24),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Items and quantities',
-                      style: TextStyle(fontWeight: FontWeight.w700),
+                    TextFormField(
+                      controller: table,
+                      decoration:
+                          const InputDecoration(labelText: 'Table / token'),
                     ),
-                  ),
-                  for (var i = 0; i < order.items.length; i++)
+                    TextFormField(
+                      controller: note,
+                      decoration:
+                          const InputDecoration(labelText: 'Order note'),
+                    ),
+                    const Divider(height: 24),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Items and quantities',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ...List.generate(editItems.length, (i) {
+                      final item = editItems[i];
+                      return Row(
+                        children: [
+                          Expanded(child: Text('${item.emoji} ${item.name}')),
+                          SizedBox(
+                            width: 85,
+                            child: TextFormField(
+                              key: ValueKey('edit_order_qty_$i'),
+                              initialValue: '${item.qty}',
+                              keyboardType: TextInputType.number,
+                              decoration:
+                                  const InputDecoration(labelText: 'Qty'),
+                              validator: (v) {
+                                final n = int.tryParse(v ?? '');
+                                return n == null || n < 0 ? 'Invalid' : null;
+                              },
+                              onChanged: (v) {
+                                final n = int.tryParse(v);
+                                if (n != null) {
+                                  editItems[i] = OrderItem(
+                                    name: item.name,
+                                    qty: n,
+                                    price: item.price,
+                                    emoji: item.emoji,
+                                    category: item.category,
+                                  );
+                                }
+                              },
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Remove item',
+                            onPressed: () =>
+                                setDialogState(() => editItems.removeAt(i)),
+                            icon: const Icon(Icons.delete_outline,
+                                color: Colors.redAccent),
+                          ),
+                        ],
+                      );
+                    }),
+                    const SizedBox(height: 10),
                     Row(
                       children: [
-                        Expanded(child: Text(order.items[i].name)),
-                        SizedBox(
-                          width: 85,
-                          child: TextFormField(
-                            controller: quantities[i],
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(labelText: 'Qty'),
-                            validator: (v) {
-                              final n = int.tryParse(v ?? '');
-                              return n == null || n < 0 ? 'Invalid' : null;
-                            },
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: selectedMenuId,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Add menu item',
+                            ),
+                            items: menuItems
+                                .map(
+                                  (m) => DropdownMenuItem(
+                                    value: m.id,
+                                    child: Text(
+                                      '${m.name} • ₹${m.price.toStringAsFixed(2)}',
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) =>
+                                setDialogState(() => selectedMenuId = v),
                           ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton.icon(
+                          onPressed: selectedMenuId == null
+                              ? null
+                              : () {
+                                  final menu = menuItems.firstWhere(
+                                    (m) => m.id == selectedMenuId,
+                                  );
+                                  final index = editItems.indexWhere(
+                                    (i) => i.name == menu.name,
+                                  );
+                                  setDialogState(() {
+                                    if (index >= 0) {
+                                      final old = editItems[index];
+                                      editItems[index] = OrderItem(
+                                        name: old.name,
+                                        qty: old.qty + 1,
+                                        price: old.price,
+                                        emoji: old.emoji,
+                                        category: old.category,
+                                      );
+                                    } else {
+                                      editItems.add(OrderItem(
+                                        name: menu.name,
+                                        qty: 1,
+                                        price: menu.price,
+                                        emoji: menu.emoji,
+                                        category: menu.category,
+                                      ));
+                                    }
+                                    selectedMenuId = null;
+                                  });
+                                },
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text('Add'),
                         ),
                       ],
                     ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Discard'),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.pop(ctx, form.currentState?.validate() ?? false),
+              child: const Text('Save changes'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Discard'),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.pop(ctx, form.currentState?.validate() ?? false),
-            child: const Text('Save changes'),
-          ),
-        ],
       ),
     );
+
     if (result == true && mounted) {
-      final updated = <OrderItem>[];
-      for (var i = 0; i < order.items.length; i++) {
-        final qty = int.parse(quantities[i].text);
-        if (qty > 0) {
-          final old = order.items[i];
-          updated.add(
-            OrderItem(
-              name: old.name,
-              qty: qty,
-              price: old.price,
-              emoji: old.emoji,
-              category: old.category,
-            ),
-          );
-        }
-      }
+      final updated = editItems.where((i) => i.qty > 0).toList();
       if (updated.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -257,25 +342,20 @@ class _OrderTileState extends State<OrderTile> {
           ),
         );
       } else {
-        context.read<OrderBloc>().add(
-          OrderEdited(
-            orderId: order.id,
-            customerName: name.text.trim(),
-            phone: phone.text.trim(),
-            table: table.text.trim(),
-            note: note.text.trim(),
-            items: updated,
-          ),
-        );
+        context.read<OrderBloc>().add(OrderEdited(
+              orderId: order.id,
+              customerName: name.text.trim(),
+              phone: phone.text.trim(),
+              table: table.text.trim(),
+              note: note.text.trim(),
+              items: updated,
+            ));
       }
     }
     name.dispose();
     phone.dispose();
     table.dispose();
     note.dispose();
-    for (final c in quantities) {
-      c.dispose();
-    }
   }
 
   @override

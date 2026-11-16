@@ -171,15 +171,17 @@ class DashboardPage extends StatelessWidget {
                               ],
                             ),
                           ),
-                          OutlinedButton.icon(
-                            onPressed: () => _setOpeningCash(context),
-                            icon: const Icon(Icons.edit_outlined, size: 16),
-                            label: Text(
-                              snapshot.data?.exists == true
-                                  ? 'Update'
-                                  : 'Set opening cash',
+                          if (snapshot.data?.exists != true)
+                            OutlinedButton.icon(
+                              onPressed: () => _setOpeningCash(context),
+                              icon: const Icon(Icons.add, size: 16),
+                              label: const Text('Set opening cash'),
+                            )
+                          else
+                            const Chip(
+                              avatar: Icon(Icons.lock_outline, size: 15),
+                              label: Text('Opening cash set'),
                             ),
-                          ),
                         ],
                       ),
                     ),

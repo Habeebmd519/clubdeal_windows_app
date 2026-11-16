@@ -77,7 +77,7 @@ class _AllOrdersPageState extends State<AllOrdersPage> {
     selected.clear();
     nameController.clear();
     phoneController.clear();
-    tableController.text = 'main';
+    tableController.text = 'A1';
     noteController.clear();
     itemSearchController.clear();
 
@@ -119,18 +119,23 @@ class _AllOrdersPageState extends State<AllOrdersPage> {
                           ),
                           const SizedBox(width: 8),
                           SizedBox(
-                            width: 130,
-                            child: TextField(
-                              controller: tableController,
+                            width: 150,
+                            child: DropdownButtonFormField<String>(
+                              value: tableController.text,
                               decoration: const InputDecoration(labelText: 'Table'),
+                              items: List.generate(5, (i) {
+                                final value = 'A${i + 1}';
+                                return DropdownMenuItem(
+                                  value: value,
+                                  child: Text(value),
+                                );
+                              }),
+                              onChanged: (value) {
+                                if (value != null) tableController.text = value;
+                              },
                             ),
                           ),
                         ],
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: noteController,
-                        decoration: const InputDecoration(labelText: 'Note'),
                       ),
                       const SizedBox(height: 12),
                       TextField(
@@ -149,6 +154,15 @@ class _AllOrdersPageState extends State<AllOrdersPage> {
                                   },
                                   icon: const Icon(Icons.close, size: 18),
                                 ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: noteController,
+                        decoration: const InputDecoration(
+                          labelText: 'Order notes',
+                          hintText: 'Special instructions...',
+                          prefixIcon: Icon(Icons.notes),
                         ),
                       ),
                       const SizedBox(height: 8),
