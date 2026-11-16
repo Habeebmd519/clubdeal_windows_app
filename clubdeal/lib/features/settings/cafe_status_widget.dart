@@ -4,14 +4,14 @@ import 'package:flutter/material.dart';
 class CafeStatusWidget extends StatelessWidget {
   const CafeStatusWidget({super.key});
 
+  String _legacyDayKey(DateTime value) =>
+      '${value.year.toString().padLeft(4, '0')}'
+      '${value.month.toString().padLeft(2, '0')}'
+      '${value.day.toString().padLeft(2, '0')}';
+
   Future<void> _changeStatus(BuildContext context, bool open) async {
     final db = FirebaseFirestore.instance;
-    final now = DateTime.now();
-
-    final dayKey =
-        '${now.year.toString().padLeft(4, '0')}'
-        '${now.month.toString().padLeft(2, '0')}'
-        '${now.day.toString().padLeft(2, '0')}';
+    final statusRef = db.collection('app_config').doc('cafe_status');
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -19,10 +19,8 @@ class CafeStatusWidget extends StatelessWidget {
         title: Text(open ? 'Open the shop?' : 'Close the shop?'),
         content: Text(
           open
-              ? 'The shop will start accepting new orders.'
-              : 'Closing will save today’s sales, expenses, cash session '
-                    'and remaining stock. Stock will carry forward to the '
-                    'next day. Previous records will not be deleted.',
+              ? 'A new business session will start. Dashboard daily figures will start from zero, and current remaining stock will be recorded as opening stock.'
+              : 'The current business session will be closed. Sales, expenses, cash and remaining stock will be saved. Remaining stock will carry forward; inventory will not be erased.',
         ),
         actions: [
           TextButton(
@@ -36,37 +34,44 @@ class CafeStatusWidget extends StatelessWidget {
         ],
       ),
     );
-
     if (confirmed != true) return;
 
     try {
-      if (!open) {
-        final start = DateTime(now.year, now.month, now.day);
-        final end = start.add(const Duration(days: 1));
+      final statusSnapshot = await statusRef.get();
+      final statusData = statusSnapshot.data() ?? <String, dynamic>{};
+      final currentlyOpen = statusData['status'] != false;
+      if (currentlyOpen == open) return;
 
-        // Fetch today's orders.
+      final now = DateTime.now();
+
+      if (!open) {
+        final sessionId = (statusData['activeSessionId'] ?? '').toString();
+        final storedStart = statusData['sessionStartedAt'];
+        final sessionStart = storedStart is Timestamp
+            ? storedStart.toDate()
+            : DateTime(now.year, now.month, now.day);
+        final reportId = sessionId.isNotEmpty ? sessionId : _legacyDayKey(now);
+
         final orderSnapshot = await db
             .collection('orders')
             .where(
               'createdAt',
-              isGreaterThanOrEqualTo: Timestamp.fromDate(start),
+              isGreaterThanOrEqualTo: Timestamp.fromDate(sessionStart),
             )
-            .where('createdAt', isLessThan: Timestamp.fromDate(end))
+            .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(now))
             .get();
 
         double cashSales = 0;
         double cardSales = 0;
         double onlineSales = 0;
-        int orderCount = orderSnapshot.docs.length;
+        int deliveredOrderCount = 0;
 
         for (final doc in orderSnapshot.docs) {
           final data = doc.data();
-
           if (data['status'] != 'delivered') continue;
-
           final amount = (data['total'] as num? ?? 0).toDouble();
-
-          switch (data['paymentMethod']) {
+          deliveredOrderCount++;
+          switch ((data['paymentMethod'] ?? '').toString().toLowerCase()) {
             case 'cash':
               cashSales += amount;
               break;
@@ -74,89 +79,120 @@ class CafeStatusWidget extends StatelessWidget {
               cardSales += amount;
               break;
             case 'online':
+            case 'upi':
               onlineSales += amount;
               break;
           }
         }
 
-        // Fetch today's expenses.
         final expenseSnapshot = await db
             .collection('expenses')
             .where(
               'createdAt',
-              isGreaterThanOrEqualTo: Timestamp.fromDate(start),
+              isGreaterThanOrEqualTo: Timestamp.fromDate(sessionStart),
             )
-            .where('createdAt', isLessThan: Timestamp.fromDate(end))
+            .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(now))
             .get();
-
         final totalExpenses = expenseSnapshot.docs.fold<double>(
           0,
           (sum, doc) => sum + ((doc.data()['amount'] as num?) ?? 0).toDouble(),
         );
 
-        // Capture current ingredient balances without changing them.
         final ingredientSnapshot = await db.collection('ingredients').get();
-
-        final stockSnapshot = <String, dynamic>{};
-
+        final closingStock = <String, dynamic>{};
         for (final doc in ingredientSnapshot.docs) {
           final data = doc.data();
-
-          stockSnapshot[doc.id] = {
+          closingStock[doc.id] = {
             'name': data['name'] ?? '',
-            'quantity': data['stockQuantity'] ?? 0,
+            'quantity': (data['stockQuantity'] as num? ?? 0).toDouble(),
             'unit': data['baseUnit'] ?? '',
           };
         }
 
-        // Read opening cash for today.
-        final cashRef = db.collection('cash_sessions').doc(dayKey);
-        final cashDoc = await cashRef.get();
-
-        final openingCash = (cashDoc.data()?['openingCash'] as num? ?? 0)
+        final cashRef = db.collection('cash_sessions').doc(reportId);
+        final cashSnapshot = await cashRef.get();
+        final openingCash = (cashSnapshot.data()?['openingCash'] as num? ?? 0)
             .toDouble();
 
-        // Save the daily closing report.
-        await db.collection('daily_closings').doc(dayKey).set({
-          'dateKey': dayKey,
+        final report = <String, dynamic>{
+          'sessionId': reportId,
+          'status': 'closed',
+          'dateKey': _legacyDayKey(now),
+          'sessionStartedAt': Timestamp.fromDate(sessionStart),
           'closedAt': FieldValue.serverTimestamp(),
-          'orderCount': orderCount,
+          'orderCount': deliveredOrderCount,
           'cashSales': cashSales,
           'cardSales': cardSales,
           'onlineSales': onlineSales,
           'totalSales': cashSales + cardSales + onlineSales,
           'totalExpenses': totalExpenses,
           'openingCash': openingCash,
-          'stockSnapshot': stockSnapshot,
-        }, SetOptions(merge: true));
+          'stockSnapshot': closingStock,
+        };
 
-        // Close today's cash session.
-        await cashRef.set({
+        final batch = db.batch();
+        batch.set(
+          db.collection('daily_closings').doc(reportId),
+          report,
+          SetOptions(merge: true),
+        );
+        batch.set(cashRef, {
           'closedAt': FieldValue.serverTimestamp(),
           'isClosed': true,
+          'sessionId': reportId,
         }, SetOptions(merge: true));
+        batch.set(statusRef, {
+          'status': false,
+          'lastClosedSessionId': reportId,
+          'activeSessionId': FieldValue.delete(),
+          'sessionStartedAt': FieldValue.delete(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        await batch.commit();
+      } else {
+        // Start a distinct session. The live stock balance is NOT changed:
+        // it becomes the opening stock snapshot for this new session.
+        final sessionRef = db.collection('daily_closings').doc();
+        final ingredientSnapshot = await db.collection('ingredients').get();
+        final openingStock = <String, dynamic>{};
+        for (final doc in ingredientSnapshot.docs) {
+          final data = doc.data();
+          openingStock[doc.id] = {
+            'name': data['name'] ?? '',
+            'quantity': (data['stockQuantity'] as num? ?? 0).toDouble(),
+            'unit': data['baseUnit'] ?? '',
+          };
+        }
+
+        final batch = db.batch();
+        batch.set(sessionRef, {
+          'sessionId': sessionRef.id,
+          'status': 'open',
+          'sessionStartedAt': FieldValue.serverTimestamp(),
+          'openingStock': openingStock,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        batch.set(statusRef, {
+          'status': true,
+          'activeSessionId': sessionRef.id,
+          'sessionStartedAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        await batch.commit();
       }
 
-      // Change shop status only after the closing report is saved.
-      await db.collection('app_config').doc('cafe_status').set({
-        'status': open,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
       if (!context.mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             open
-                ? 'Shop opened successfully.'
-                : 'Shop closed. Daily report and stock snapshot saved.',
+                ? 'Shop opened. New dashboard session started; current stock saved as opening stock.'
+                : 'Shop closed. Session report and closing stock saved.',
           ),
         ),
       );
     } catch (e) {
       if (!context.mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Could not ${open ? 'open' : 'close'} shop: $e'),
@@ -176,7 +212,6 @@ class CafeStatusWidget extends StatelessWidget {
       builder: (context, snapshot) {
         final isOpen = snapshot.data?.data()?['status'] != false;
         final loading = snapshot.connectionState == ConnectionState.waiting;
-
         if (snapshot.hasError) {
           return const Text('Shop status unavailable');
         }
@@ -199,8 +234,8 @@ class CafeStatusWidget extends StatelessWidget {
                 onChanged: loading
                     ? null
                     : (value) {
-                        if (value != null && value != isOpen) {
-                          _changeStatus(context, value);
+                        if (value == true && !isOpen) {
+                          _changeStatus(context, true);
                         }
                       },
               ),
@@ -211,8 +246,8 @@ class CafeStatusWidget extends StatelessWidget {
                 onChanged: loading
                     ? null
                     : (value) {
-                        if (value != null && value != isOpen) {
-                          _changeStatus(context, value);
+                        if (value == false && isOpen) {
+                          _changeStatus(context, false);
                         }
                       },
               ),

@@ -14,10 +14,7 @@ import '../theme/app_theme.dart';
 class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
 
-  String _dayKey(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
-
-  Future<void> _setOpeningCash(BuildContext context) async {
+  Future<void> _setOpeningCash(BuildContext context, String sessionId) async {
     final controller = TextEditingController();
     final form = GlobalKey<FormState>();
     final value = await showDialog<double>(
@@ -56,23 +53,37 @@ class DashboardPage extends StatelessWidget {
     );
     controller.dispose();
     if (value == null) return;
-    final now = DateTime.now();
+    if (sessionId.isEmpty) return;
     await FirebaseFirestore.instance
         .collection('cash_sessions')
-        .doc(_dayKey(now))
+        .doc(sessionId)
         .set({
-          'dateKey': _dayKey(now),
+          'sessionId': sessionId,
           'openingCash': value,
           'openedAt': FieldValue.serverTimestamp(),
+          'isClosed': false,
         }, SetOptions(merge: true));
   }
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final start = DateTime(now.year, now.month, now.day);
-    final key = _dayKey(now);
-    return BlocBuilder<OrderBloc, OrderState>(
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('app_config')
+          .doc('cafe_status')
+          .snapshots(),
+      builder: (context, sessionSnapshot) {
+        final sessionData = sessionSnapshot.data?.data() ?? {};
+        final storedStart = sessionData['sessionStartedAt'];
+        final start = storedStart is Timestamp
+            ? storedStart.toDate()
+            : DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+        final sessionId = (sessionData['activeSessionId'] ?? '').toString();
+        final now = DateTime.now();
+        final key = sessionId.isNotEmpty
+            ? sessionId
+            : '${now.year.toString().padLeft(4, '0')}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+        return BlocBuilder<OrderBloc, OrderState>(
       builder: (context, ordersState) => BlocBuilder<ExpenseBloc, ExpenseState>(
         builder: (context, expenseState) {
           final todays = ordersState.orders
@@ -80,7 +91,7 @@ class DashboardPage extends StatelessWidget {
                 (o) =>
                     o.createdAt != null &&
                     !o.createdAt!.isBefore(start) &&
-                    o.createdAt!.isBefore(start.add(const Duration(days: 1))),
+                    !o.createdAt!.isAfter(now),
               )
               .toList();
           final paid = ordersState.orders
@@ -90,9 +101,7 @@ class DashboardPage extends StatelessWidget {
                     o.paymentMethod != null &&
                     (o.deliveredAt ?? o.createdAt) != null &&
                     !(o.deliveredAt ?? o.createdAt)!.isBefore(start) &&
-                    (o.deliveredAt ?? o.createdAt)!.isBefore(
-                      start.add(const Duration(days: 1)),
-                    ),
+                    !(o.deliveredAt ?? o.createdAt)!.isAfter(now),
               )
               .toList();
           double sum(PaymentMethod m) => paid
@@ -105,9 +114,8 @@ class DashboardPage extends StatelessWidget {
           final expenses = expenseState.items
               .where(
                 (e) =>
-                    e.createdAt.year == now.year &&
-                    e.createdAt.month == now.month &&
-                    e.createdAt.day == now.day,
+                    !e.createdAt.isBefore(start) &&
+                    !e.createdAt.isAfter(now),
               )
               .fold<double>(0, (a, e) => a + e.amount);
           final active = ordersState.orders
@@ -173,7 +181,7 @@ class DashboardPage extends StatelessWidget {
                           ),
                           if (snapshot.data?.exists != true)
                             OutlinedButton.icon(
-                              onPressed: () => _setOpeningCash(context),
+                              onPressed: sessionId.isEmpty ? null : () => _setOpeningCash(context, sessionId),
                               icon: const Icon(Icons.add, size: 16),
                               label: const Text('Set opening cash'),
                             )
@@ -188,6 +196,92 @@ class DashboardPage extends StatelessWidget {
                   );
                 },
               ),
+              const SizedBox(height: 12),
+              if (sessionId.isNotEmpty)
+                StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                  stream: FirebaseFirestore.instance
+                      .collection('daily_closings')
+                      .doc(sessionId)
+                      .snapshots(),
+                  builder: (context, stockSessionSnapshot) {
+                    final raw = stockSessionSnapshot.data?.data()?['openingStock'];
+                    final stock = raw is Map
+                        ? Map<String, dynamic>.from(raw)
+                        : <String, dynamic>{};
+                    final entries = stock.entries.toList()
+                      ..sort((a, b) {
+                        final aName = a.value is Map
+                            ? (a.value['name'] ?? '').toString()
+                            : a.key;
+                        final bName = b.value is Map
+                            ? (b.value['name'] ?? '').toString()
+                            : b.key;
+                        return aName.compareTo(bName);
+                      });
+                    return Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.inventory_2_outlined,
+                                    color: AppColors.gold),
+                                const SizedBox(width: 9),
+                                const Expanded(
+                                  child: Text('Opening stock for this session',
+                                      style: TextStyle(fontWeight: FontWeight.w700)),
+                                ),
+                                Text('${entries.length} items',
+                                    style: const TextStyle(color: AppColors.muted)),
+                              ],
+                            ),
+                            if (stockSessionSnapshot.connectionState ==
+                                ConnectionState.waiting)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 10),
+                                child: LinearProgressIndicator(minHeight: 2),
+                              )
+                            else if (entries.isEmpty)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 8),
+                                child: Text('No opening stock snapshot found.',
+                                    style: TextStyle(color: AppColors.muted)),
+                              )
+                            else
+                              ...entries.map((entry) {
+                                final value = entry.value is Map
+                                    ? Map<String, dynamic>.from(entry.value as Map)
+                                    : <String, dynamic>{};
+                                final quantity =
+                                    (value['quantity'] as num? ?? 0).toDouble();
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 7),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          (value['name'] ?? entry.key).toString(),
+                                          style: const TextStyle(color: AppColors.cream2),
+                                        ),
+                                      ),
+                                      Text(
+                                        '${quantity.toStringAsFixed(quantity % 1 == 0 ? 0 : 2)} ${(value['unit'] ?? '').toString()}',
+                                        style: const TextStyle(
+                                            color: AppColors.cream,
+                                            fontWeight: FontWeight.w600),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
               const SizedBox(height: 12),
               GridView.count(
                 crossAxisCount: 4,
@@ -333,6 +427,8 @@ class DashboardPage extends StatelessWidget {
           );
         },
       ),
-    );
+      );
+    },
+  );
   }
 }

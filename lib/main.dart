@@ -47,13 +47,7 @@ Future<void> main() async {
           BlocProvider(
             create: (_) => ExpenseBloc(expenseRepository)
               ..add(
-                WatchExpenses(
-                  DateTime(
-                    DateTime.now().year,
-                    DateTime.now().month,
-                    DateTime.now().day,
-                  ),
-                ),
+                WatchExpenses(DateTime(2000, 1, 1)),
               ),
           ),
           BlocProvider(
