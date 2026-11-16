@@ -5,12 +5,24 @@ class CafeStatusWidget extends StatelessWidget {
   const CafeStatusWidget({super.key});
 
   Future<void> _changeStatus(BuildContext context, bool open) async {
+    final db = FirebaseFirestore.instance;
+    final now = DateTime.now();
+
+    final dayKey =
+        '${now.year.toString().padLeft(4, '0')}'
+        '${now.month.toString().padLeft(2, '0')}'
+        '${now.day.toString().padLeft(2, '0')}';
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(open ? 'Open the shop?' : 'Close the shop?'),
         content: Text(
-          open ? 'The shop will start accepting new orders.' : 'The shop will stop accepting new orders. Existing orders will remain available.',
+          open
+              ? 'The shop will start accepting new orders.'
+              : 'Closing will save today’s sales, expenses, cash session '
+                    'and remaining stock. Stock will carry forward to the '
+                    'next day. Previous records will not be deleted.',
         ),
         actions: [
           TextButton(
@@ -19,7 +31,7 @@ class CafeStatusWidget extends StatelessWidget {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(open ? 'Yes, open shop' : 'Yes, close shop'),
+            child: Text(open ? 'Open Shop' : 'Close Shop'),
           ),
         ],
       ),
@@ -28,18 +40,127 @@ class CafeStatusWidget extends StatelessWidget {
     if (confirmed != true) return;
 
     try {
-      await FirebaseFirestore.instance
-          .collection('app_config')
-          .doc('cafe_status')
-          .set({
-            'status': open,
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+      if (!open) {
+        final start = DateTime(now.year, now.month, now.day);
+        final end = start.add(const Duration(days: 1));
+
+        // Fetch today's orders.
+        final orderSnapshot = await db
+            .collection('orders')
+            .where(
+              'createdAt',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(start),
+            )
+            .where('createdAt', isLessThan: Timestamp.fromDate(end))
+            .get();
+
+        double cashSales = 0;
+        double cardSales = 0;
+        double onlineSales = 0;
+        int orderCount = orderSnapshot.docs.length;
+
+        for (final doc in orderSnapshot.docs) {
+          final data = doc.data();
+
+          if (data['status'] != 'delivered') continue;
+
+          final amount = (data['total'] as num? ?? 0).toDouble();
+
+          switch (data['paymentMethod']) {
+            case 'cash':
+              cashSales += amount;
+              break;
+            case 'card':
+              cardSales += amount;
+              break;
+            case 'online':
+              onlineSales += amount;
+              break;
+          }
+        }
+
+        // Fetch today's expenses.
+        final expenseSnapshot = await db
+            .collection('expenses')
+            .where(
+              'createdAt',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(start),
+            )
+            .where('createdAt', isLessThan: Timestamp.fromDate(end))
+            .get();
+
+        final totalExpenses = expenseSnapshot.docs.fold<double>(
+          0,
+          (sum, doc) => sum + ((doc.data()['amount'] as num?) ?? 0).toDouble(),
+        );
+
+        // Capture current ingredient balances without changing them.
+        final ingredientSnapshot = await db.collection('ingredients').get();
+
+        final stockSnapshot = <String, dynamic>{};
+
+        for (final doc in ingredientSnapshot.docs) {
+          final data = doc.data();
+
+          stockSnapshot[doc.id] = {
+            'name': data['name'] ?? '',
+            'quantity': data['stockQuantity'] ?? 0,
+            'unit': data['baseUnit'] ?? '',
+          };
+        }
+
+        // Read opening cash for today.
+        final cashRef = db.collection('cash_sessions').doc(dayKey);
+        final cashDoc = await cashRef.get();
+
+        final openingCash = (cashDoc.data()?['openingCash'] as num? ?? 0)
+            .toDouble();
+
+        // Save the daily closing report.
+        await db.collection('daily_closings').doc(dayKey).set({
+          'dateKey': dayKey,
+          'closedAt': FieldValue.serverTimestamp(),
+          'orderCount': orderCount,
+          'cashSales': cashSales,
+          'cardSales': cardSales,
+          'onlineSales': onlineSales,
+          'totalSales': cashSales + cardSales + onlineSales,
+          'totalExpenses': totalExpenses,
+          'openingCash': openingCash,
+          'stockSnapshot': stockSnapshot,
+        }, SetOptions(merge: true));
+
+        // Close today's cash session.
+        await cashRef.set({
+          'closedAt': FieldValue.serverTimestamp(),
+          'isClosed': true,
+        }, SetOptions(merge: true));
+      }
+
+      // Change shop status only after the closing report is saved.
+      await db.collection('app_config').doc('cafe_status').set({
+        'status': open,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            open
+                ? 'Shop opened successfully.'
+                : 'Shop closed. Daily report and stock snapshot saved.',
+          ),
+        ),
+      );
     } catch (e) {
       if (!context.mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not update shop status: $e')),
+        SnackBar(
+          content: Text('Could not ${open ? 'open' : 'close'} shop: $e'),
+        ),
       );
     }
   }
