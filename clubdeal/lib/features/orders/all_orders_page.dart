@@ -55,16 +55,16 @@ class _AllOrdersPageState extends State<AllOrdersPage> {
                 child: orderState.loading && orderState.orders.isEmpty
                     ? const Center(child: CircularProgressIndicator())
                     : orderState.orders.isEmpty
-                        ? const EmptyPanel(
-                            title: 'No orders',
-                            message: 'Orders will appear here.',
-                          )
-                        : ListView.separated(
-                            itemCount: orderState.orders.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 7),
-                            itemBuilder: (_, index) =>
-                                _HistoryRow(order: orderState.orders[index]),
-                          ),
+                    ? const EmptyPanel(
+                        title: 'No orders',
+                        message: 'Orders will appear here.',
+                      )
+                    : ListView.separated(
+                        itemCount: orderState.orders.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 7),
+                        itemBuilder: (_, index) =>
+                            _HistoryRow(order: orderState.orders[index]),
+                      ),
               ),
             ],
           ),
@@ -77,7 +77,7 @@ class _AllOrdersPageState extends State<AllOrdersPage> {
     selected.clear();
     nameController.clear();
     phoneController.clear();
-    tableController.text = 'main';
+    tableController.text = 'A1';
     noteController.clear();
     itemSearchController.clear();
 
@@ -107,30 +107,41 @@ class _AllOrdersPageState extends State<AllOrdersPage> {
                           Expanded(
                             child: TextField(
                               controller: nameController,
-                              decoration: const InputDecoration(labelText: 'Customer name'),
+                              decoration: const InputDecoration(
+                                labelText: 'Customer name',
+                              ),
                             ),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: TextField(
                               controller: phoneController,
-                              decoration: const InputDecoration(labelText: 'Phone'),
+                              decoration: const InputDecoration(
+                                labelText: 'Phone',
+                              ),
                             ),
                           ),
                           const SizedBox(width: 8),
                           SizedBox(
-                            width: 130,
-                            child: TextField(
-                              controller: tableController,
-                              decoration: const InputDecoration(labelText: 'Table'),
+                            width: 150,
+                            child: DropdownButtonFormField<String>(
+                              value: tableController.text,
+                              decoration: const InputDecoration(
+                                labelText: 'Table',
+                              ),
+                              items: List.generate(5, (i) {
+                                final value = 'A${i + 1}';
+                                return DropdownMenuItem(
+                                  value: value,
+                                  child: Text(value),
+                                );
+                              }),
+                              onChanged: (value) {
+                                if (value != null) tableController.text = value;
+                              },
                             ),
                           ),
                         ],
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: noteController,
-                        decoration: const InputDecoration(labelText: 'Note'),
                       ),
                       const SizedBox(height: 12),
                       TextField(
@@ -152,19 +163,33 @@ class _AllOrdersPageState extends State<AllOrdersPage> {
                         ),
                       ),
                       const SizedBox(height: 8),
+                      TextField(
+                        controller: noteController,
+                        decoration: const InputDecoration(
+                          labelText: 'Order notes',
+                          hintText: 'Special instructions...',
+                          prefixIcon: Icon(Icons.notes),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
                           '${visibleItems.length} menu item(s) • ${selected.values.fold<int>(0, (a, b) => a + b)} selected',
-                          style: const TextStyle(color: AppColors.muted, fontSize: 11),
+                          style: const TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 11,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 6),
                       Expanded(
                         child: visibleItems.isEmpty
                             ? const Center(
-                                child: Text('No matching menu items.',
-                                    style: TextStyle(color: AppColors.muted)),
+                                child: Text(
+                                  'No matching menu items.',
+                                  style: TextStyle(color: AppColors.muted),
+                                ),
                               )
                             : ListView.builder(
                                 itemCount: visibleItems.length,
@@ -177,25 +202,31 @@ class _AllOrdersPageState extends State<AllOrdersPage> {
                                     subtitle: Text(
                                       '₹${item.price.toStringAsFixed(2)} • ${item.category}${item.isAvailable ? '' : ' • Unavailable'}',
                                     ),
-                                    leading: Text(item.emoji, style: const TextStyle(fontSize: 22)),
+                                    leading: Text(
+                                      item.emoji,
+                                      style: const TextStyle(fontSize: 22),
+                                    ),
                                     trailing: SizedBox(
                                       width: 124,
                                       child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.end,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.end,
                                         children: [
                                           IconButton(
                                             tooltip: 'Remove one',
                                             onPressed: qty <= 0
                                                 ? null
                                                 : () => setDialogState(() {
-                                                      final next = qty - 1;
-                                                      if (next == 0) {
-                                                        selected.remove(item.id);
-                                                      } else {
-                                                        selected[item.id] = next;
-                                                      }
-                                                    }),
-                                            icon: const Icon(Icons.remove_circle_outline),
+                                                    final next = qty - 1;
+                                                    if (next == 0) {
+                                                      selected.remove(item.id);
+                                                    } else {
+                                                      selected[item.id] = next;
+                                                    }
+                                                  }),
+                                            icon: const Icon(
+                                              Icons.remove_circle_outline,
+                                            ),
                                           ),
                                           Text('$qty'),
                                           IconButton(
@@ -203,9 +234,11 @@ class _AllOrdersPageState extends State<AllOrdersPage> {
                                             onPressed: !item.isAvailable
                                                 ? null
                                                 : () => setDialogState(() {
-                                                      selected[item.id] = qty + 1;
-                                                    }),
-                                            icon: const Icon(Icons.add_circle_outline),
+                                                    selected[item.id] = qty + 1;
+                                                  }),
+                                            icon: const Icon(
+                                              Icons.add_circle_outline,
+                                            ),
                                           ),
                                         ],
                                       ),
@@ -231,29 +264,38 @@ class _AllOrdersPageState extends State<AllOrdersPage> {
                   for (final item in menu) {
                     final qty = selected[item.id] ?? 0;
                     if (qty > 0) {
-                      items.add(OrderItem(
-                        name: item.name,
-                        qty: qty,
-                        price: item.price,
-                        emoji: item.emoji,
-                        category: item.category,
-                      ));
+                      items.add(
+                        OrderItem(
+                          name: item.name,
+                          qty: qty,
+                          price: item.price,
+                          emoji: item.emoji,
+                          category: item.category,
+                        ),
+                      );
                     }
                   }
                   if (nameController.text.trim().isEmpty || items.isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Enter customer name and select at least one item.')),
+                      const SnackBar(
+                        content: Text(
+                          'Enter customer name and select at least one item.',
+                        ),
+                      ),
                     );
                     return;
                   }
                   try {
-                    await context.read<OrderBloc>().repository.createManualOrder(
-                      customerName: nameController.text.trim(),
-                      phone: phoneController.text.trim(),
-                      table: tableController.text.trim(),
-                      note: noteController.text.trim(),
-                      items: items,
-                    );
+                    await context
+                        .read<OrderBloc>()
+                        .repository
+                        .createManualOrder(
+                          customerName: nameController.text.trim(),
+                          phone: phoneController.text.trim(),
+                          table: tableController.text.trim(),
+                          note: noteController.text.trim(),
+                          items: items,
+                        );
                     if (dialogContext.mounted) Navigator.pop(dialogContext);
                   } catch (e) {
                     if (!context.mounted) return;
@@ -290,14 +332,12 @@ class _HistoryRowState extends State<_HistoryRow> {
     try {
       await context.read<PrinterService>().printOrder(widget.order);
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bill sent to printer.')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Bill sent to printer.')));
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Print failed: $e')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Print failed: $e')));
     } finally {
       if (mounted) setState(() => printing = false);
     }
@@ -325,17 +365,42 @@ class _HistoryRowState extends State<_HistoryRow> {
                     width: 95,
                     child: Text(
                       '#${order.id.substring(0, order.id.length > 7 ? 7 : order.id.length)}',
-                      style: const TextStyle(color: AppColors.gold, fontWeight: FontWeight.w700),
+                      style: const TextStyle(
+                        color: AppColors.gold,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
-                  Expanded(child: Text(order.customerName, style: const TextStyle(color: AppColors.cream))),
-                  SizedBox(width: 100, child: Text(order.table, style: const TextStyle(color: AppColors.cream2))),
-                  SizedBox(width: 100, child: Text('${order.items.length} item(s)', style: const TextStyle(color: AppColors.muted))),
+                  Expanded(
+                    child: Text(
+                      order.customerName,
+                      style: const TextStyle(color: AppColors.cream),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 100,
+                    child: Text(
+                      order.table,
+                      style: const TextStyle(color: AppColors.cream2),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 100,
+                    child: Text(
+                      '${order.items.length} item(s)',
+                      style: const TextStyle(color: AppColors.muted),
+                    ),
+                  ),
                   SizedBox(
                     width: 110,
-                    child: Text('₹${order.total.toStringAsFixed(2)}',
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(color: AppColors.cream, fontWeight: FontWeight.w700)),
+                    child: Text(
+                      '₹${order.total.toStringAsFixed(2)}',
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        color: AppColors.cream,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 8),
                   IconButton(
@@ -343,10 +408,17 @@ class _HistoryRowState extends State<_HistoryRow> {
                     visualDensity: VisualDensity.compact,
                     onPressed: printing ? null : () => _print(context),
                     icon: printing
-                        ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2))
+                        ? const SizedBox(
+                            width: 15,
+                            height: 15,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
                         : const Icon(Icons.print_outlined, size: 18),
                   ),
-                  Icon(expanded ? Icons.expand_less : Icons.expand_more, color: AppColors.muted),
+                  Icon(
+                    expanded ? Icons.expand_less : Icons.expand_more,
+                    color: AppColors.muted,
+                  ),
                 ],
               ),
             ),
@@ -362,44 +434,103 @@ class _HistoryRowState extends State<_HistoryRow> {
                     spacing: 18,
                     runSpacing: 6,
                     children: [
-                      Text('Customer: ${order.customerName}', style: const TextStyle(color: AppColors.cream2, fontSize: 12)),
-                      Text('Phone: ${order.phone.isEmpty ? '—' : order.phone}', style: const TextStyle(color: AppColors.cream2, fontSize: 12)),
-                      Text('Status: ${order.status.name.toUpperCase()}', style: const TextStyle(color: AppColors.cream2, fontSize: 12)),
+                      Text(
+                        'Customer: ${order.customerName}',
+                        style: const TextStyle(
+                          color: AppColors.cream2,
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        'Phone: ${order.phone.isEmpty ? '—' : order.phone}',
+                        style: const TextStyle(
+                          color: AppColors.cream2,
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        'Status: ${order.status.name.toUpperCase()}',
+                        style: const TextStyle(
+                          color: AppColors.cream2,
+                          fontSize: 12,
+                        ),
+                      ),
                     ],
                   ),
                   if (order.note.trim().isNotEmpty) ...[
                     const SizedBox(height: 6),
-                    Text('Note: ${order.note}', style: const TextStyle(color: AppColors.cream2, fontSize: 12)),
+                    Text(
+                      'Note: ${order.note}',
+                      style: const TextStyle(
+                        color: AppColors.cream2,
+                        fontSize: 12,
+                      ),
+                    ),
                   ],
                   const SizedBox(height: 10),
-                  ...order.items.map((item) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 3),
-                    child: Row(
-                      children: [
-                        Text(item.emoji, style: const TextStyle(fontSize: 16)),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(item.name, style: const TextStyle(color: AppColors.cream, fontSize: 12))),
-                        Text('x${item.qty}', style: const TextStyle(color: AppColors.cream2, fontSize: 12)),
-                        const SizedBox(width: 20),
-                        SizedBox(
-                          width: 100,
-                          child: Text('₹${item.total.toStringAsFixed(2)}',
+                  ...order.items.map(
+                    (item) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 3),
+                      child: Row(
+                        children: [
+                          Text(
+                            item.emoji,
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              item.name,
+                              style: const TextStyle(
+                                color: AppColors.cream,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            'x${item.qty}',
+                            style: const TextStyle(
+                              color: AppColors.cream2,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(width: 20),
+                          SizedBox(
+                            width: 100,
+                            child: Text(
+                              '₹${item.total.toStringAsFixed(2)}',
                               textAlign: TextAlign.right,
-                              style: const TextStyle(color: AppColors.cream, fontSize: 12)),
-                        ),
-                      ],
+                              style: const TextStyle(
+                                color: AppColors.cream,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  )),
+                  ),
                   const Divider(color: AppColors.border),
                   Row(
                     children: [
-                      Text('Total: ₹${order.total.toStringAsFixed(2)}',
-                          style: const TextStyle(color: AppColors.green, fontWeight: FontWeight.w800)),
+                      Text(
+                        'Total: ₹${order.total.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          color: AppColors.green,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                       const Spacer(),
                       OutlinedButton.icon(
                         onPressed: printing ? null : () => _print(context),
                         icon: printing
-                            ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2))
+                            ? const SizedBox(
+                                width: 15,
+                                height: 15,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
                             : const Icon(Icons.print_outlined, size: 17),
                         label: Text(printing ? 'Printing…' : 'Print Bill'),
                       ),
