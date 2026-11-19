@@ -278,12 +278,30 @@ class _NetworkPrinterPanelState extends State<_NetworkPrinterPanel> {
   late final TextEditingController _hostController;
   late final TextEditingController _portController;
   bool _saving = false;
+  bool _editing = false;
+  late String _loadedHost;
+  late int _loadedPort;
 
   @override
   void initState() {
     super.initState();
-    _hostController = TextEditingController(text: widget.service.networkHost);
-    _portController = TextEditingController(text: widget.service.networkPort.toString());
+    _loadedHost = widget.service.networkHost;
+    _loadedPort = widget.service.networkPort;
+    _hostController = TextEditingController(text: _loadedHost);
+    _portController = TextEditingController(text: _loadedPort.toString());
+  }
+
+  @override
+  void didUpdateWidget(covariant _NetworkPrinterPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_editing &&
+        (widget.service.networkHost != _loadedHost ||
+            widget.service.networkPort != _loadedPort)) {
+      _loadedHost = widget.service.networkHost;
+      _loadedPort = widget.service.networkPort;
+      _hostController.text = _loadedHost;
+      _portController.text = _loadedPort.toString();
+    }
   }
 
   @override
@@ -307,6 +325,9 @@ class _NetworkPrinterPanelState extends State<_NetworkPrinterPanel> {
         host: _hostController.text,
         port: port,
       );
+      _editing = false;
+      _loadedHost = widget.service.networkHost;
+      _loadedPort = widget.service.networkPort;
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -335,6 +356,7 @@ class _NetworkPrinterPanelState extends State<_NetworkPrinterPanel> {
               Expanded(
                 child: TextField(
                   controller: _hostController,
+                  onChanged: (_) => _editing = true,
                   keyboardType: TextInputType.url,
                   decoration: const InputDecoration(
                     labelText: 'Printer IP address / host',
@@ -348,6 +370,7 @@ class _NetworkPrinterPanelState extends State<_NetworkPrinterPanel> {
                 width: 104,
                 child: TextField(
                   controller: _portController,
+                  onChanged: (_) => _editing = true,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
                     labelText: 'Port',
@@ -359,7 +382,7 @@ class _NetworkPrinterPanelState extends State<_NetworkPrinterPanel> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Find the printer IP in its network settings or router device list. The printer and PC must be on the same Wi-Fi/LAN. Port 9100 is the common RAW ESC/POS port; use the port shown by your printer if different.',
+            'Find the printer IP in its network settings or router device list. The printer and PC must be on the same Wi-Fi/LAN. Port 9100 is the common RAW ESC/POS port; use the port shown by your printer if different. This direct mode requires ESC/POS support; unsupported regional-language characters may print as question marks.',
             style: TextStyle(color: AppColors.cream2, fontSize: 11, height: 1.4),
           ),
           const SizedBox(height: 10),
