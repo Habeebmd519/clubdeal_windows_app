@@ -1,6 +1,10 @@
 name: Build Windows
 
 on:
+  push:
+    branches:
+      - main
+      - fix/windows-thermal-receipt
   workflow_dispatch:
 
 jobs:
