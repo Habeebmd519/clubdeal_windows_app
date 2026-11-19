@@ -197,7 +197,7 @@ class SettingsPage extends StatelessWidget {
                                       if (!context.mounted) return;
                                       ScaffoldMessenger.of(context)
                                           .showSnackBar(
-                                            const SnackBar(
+                                            SnackBar(
                                               content: Text(
                                                 printer.usesNetworkPrinter
                                                     ? 'Test receipt sent to network printer.'
@@ -222,7 +222,7 @@ class SettingsPage extends StatelessWidget {
                           ),
                           StatusPill(
                             text: printer.isConnected
-                                ? (printer.usesNetworkPrinter ? 'NETWORK READY' : 'READY')
+                                ? (printer.usesNetworkPrinter ? 'NETWORK SET' : 'READY')
                                 : 'NOT CONNECTED',
                             color: printer.isConnected
                                 ? AppColors.success
