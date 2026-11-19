@@ -178,7 +178,8 @@ class NetworkEscPosPrinter {
       bytes.addAll(<int>[0x1b, 0x45, enabled ? 1 : 0]);
   void _large(List<int> bytes, bool enabled) =>
       bytes.addAll(<int>[0x1d, 0x21, enabled ? 0x11 : 0x00]);
-  void _rule(List<int> bytes) => _line(bytes, '-' * _columns);
+  void _rule(List<int> bytes) =>
+      _line(bytes, List<String>.filled(_columns, '-').join());
 
   void _line(List<int> bytes, String value) {
     for (final row in _wrap(_toPrinterText(value), _columns)) {
