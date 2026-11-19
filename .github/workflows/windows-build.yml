@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/restaurant-operations
+      - fix/restaurant-operations-receipt-layout
   workflow_dispatch:
 
 jobs:

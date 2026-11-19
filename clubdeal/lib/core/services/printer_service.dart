@@ -462,6 +462,31 @@ $height = 900
 if ($r.items) {
   $height = 850 + (@($r.items).Count * 58)
 
+  # Add paper length for any content that wraps on the 58 mm page.
+  $wrapTexts = @(
+    [string]$r.address1,
+    [string]$r.address2,
+    [string]$r.email,
+    [string]$r.phone1,
+    [string]$r.phone2,
+    [string]$r.billNo,
+    [string]$r.customer,
+    [string]$r.phone,
+    [string]$r.table,
+    [string]$r.note,
+    [string]$r.vpa
+  )
+  foreach ($item in @($r.items)) {
+    $wrapTexts += [string]$item.name
+  }
+  $extraLines = 0
+  foreach ($text in $wrapTexts) {
+    if (-not [string]::IsNullOrWhiteSpace($text)) {
+      $extraLines += [Math]::Max(0, [Math]::Ceiling($text.Length / 38.0) - 1)
+    }
+  }
+  $height += ($extraLines * 18)
+
   if ($r.qr) {
     $height += 210
   }
@@ -497,20 +522,75 @@ $doc.add_PrintPage({
 
   $black = [System.Drawing.Brushes]::Black
 
+  # Draw text inside the printable width. Long words are split as well as
+  # normal word wrapping, so no receipt content can run off the right edge.
+  $drawWrapped = {
+    param($text, $font, $x, $currentY, $maxWidth, $centered, $lineHeight)
+    $value = [string]$text
+    if ([string]::IsNullOrWhiteSpace($value)) { return $currentY }
+
+    $words = [regex]::Split(($value -replace '\s+', ' ').Trim(), ' ')
+    $lines = New-Object System.Collections.Generic.List[string]
+    $line = ''
+
+    foreach ($word in $words) {
+      if ([string]::IsNullOrEmpty($word)) { continue }
+      $candidate = if ($line.Length -eq 0) { $word } else { "$line $word" }
+
+      if ($g.MeasureString($candidate, $font).Width -le $maxWidth) {
+        $line = $candidate
+        continue
+      }
+
+      if ($line.Length -gt 0) {
+        $lines.Add($line)
+        $line = ''
+      }
+
+      if ($g.MeasureString($word, $font).Width -le $maxWidth) {
+        $line = $word
+        continue
+      }
+
+      # Split a single long token (email, bill ID, etc.) to fit.
+      $part = ''
+      foreach ($character in $word.ToCharArray()) {
+        $test = "$part$character"
+        if ($part.Length -gt 0 -and $g.MeasureString($test, $font).Width -gt $maxWidth) {
+          $lines.Add($part)
+          $part = [string]$character
+        } else {
+          $part = $test
+        }
+      }
+      $line = $part
+    }
+    if ($line.Length -gt 0) { $lines.Add($line) }
+
+    foreach ($wrappedLine in $lines) {
+      if ($centered) {
+        $format = New-Object System.Drawing.StringFormat
+        $format.Alignment = [System.Drawing.StringAlignment]::Center
+        $g.DrawString(
+          [string]$wrappedLine, $font, $black,
+          [single]($x + ($maxWidth / 2)),
+          [single]$currentY, $format
+        )
+        $format.Dispose()
+      } else {
+        $g.DrawString([string]$wrappedLine, $font, $black, [single]$x, [single]$currentY)
+      }
+      $currentY += $lineHeight
+    }
+    return $currentY
+  }
+
   if ($script:r.kind -eq 'text') {
 
     $font = New-Object System.Drawing.Font('Arial',8)
 
     foreach ($line in $script:r.lines) {
-      $g.DrawString(
-        [string]$line,
-        $font,
-        $black,
-        $left,
-        $y
-      )
-
-      $y += 15
+      $y = & $drawWrapped ([string]$line) $font $left $y ($right - $left) $false 15
     }
 
     $font.Dispose()
@@ -552,71 +632,18 @@ $doc.add_PrintPage({
 
     $y += 24
 
-    $g.DrawString(
-      [string]$script:r.city,
-      $head,
-      $black,
-      [single]114,
-      [single]$y,
-      $center
-    )
+    $y = & $drawWrapped ([string]$script:r.city) $head $left $y ($right - $left) $true 16
 
-    $y += 16
+    $y = & $drawWrapped ([string]$script:r.address1) $normal $left $y ($right - $left) $true 14
 
-    $g.DrawString(
-      [string]$script:r.address1,
-      $normal,
-      $black,
-      [single]114,
-      [single]$y,
-      $center
-    )
+    $y = & $drawWrapped ([string]$script:r.address2) $normal $left $y ($right - $left) $true 14
 
-    $y += 14
+    $y = & $drawWrapped ([string]$script:r.email) $normal $left $y ($right - $left) $true 14
 
-    $g.DrawString(
-      [string]$script:r.address2,
-      $normal,
-      $black,
-      [single]114,
-      [single]$y,
-      $center
-    )
+    $y = & $drawWrapped ([string]$script:r.phone1) $normal $left $y ($right - $left) $true 14
 
-    $y += 16
-
-    $g.DrawString(
-      [string]$script:r.email,
-      $normal,
-      $black,
-      [single]114,
-      [single]$y,
-      $center
-    )
-
-    $y += 14
-
-    $g.DrawString(
-      [string]$script:r.phone1,
-      $normal,
-      $black,
-      [single]114,
-      [single]$y,
-      $center
-    )
-
-    $y += 14
-
-    $g.DrawString(
-      [string]$script:r.phone2,
-      $normal,
-      $black,
-      [single]114,
-      [single]$y,
-      $center
-    )
-
-    $y += 18
+    $y = & $drawWrapped ([string]$script:r.phone2) $normal $left $y ($right - $left) $true 14
+    $y += 4
 
     $g.DrawLine(
       [System.Drawing.Pens]::Black,
@@ -640,15 +667,7 @@ $doc.add_PrintPage({
 
     $y += 17
 
-    $g.DrawString(
-      ('Bill: ' + [string]$script:r.billNo),
-      $normal,
-      $black,
-      $left,
-      $y
-    )
-
-    $y += 14
+    $y = & $drawWrapped ('Bill: ' + [string]$script:r.billNo) $normal $left $y ($right - $left) $false 14
 
     $g.DrawString(
       ('Date: ' + [string]$script:r.date),
@@ -669,38 +688,15 @@ $doc.add_PrintPage({
 
     $y += 15
 
-    $g.DrawString(
-      ('Customer: ' + [string]$script:r.customer),
-      $normal,
-      $black,
-      $left,
-      $y
-    )
-
-    $y += 14
+    $y = & $drawWrapped ('Customer: ' + [string]$script:r.customer) $normal $left $y ($right - $left) $false 14
 
     if ([string]$script:r.phone) {
 
-      $g.DrawString(
-        ('Phone: ' + [string]$script:r.phone),
-        $normal,
-        $black,
-        $left,
-        $y
-      )
-
-      $y += 14
+      $y = & $drawWrapped ('Phone: ' + [string]$script:r.phone) $normal $left $y ($right - $left) $false 14
     }
 
-    $g.DrawString(
-      ('Table: ' + [string]$script:r.table),
-      $normal,
-      $black,
-      $left,
-      $y
-    )
-
-    $y += 17
+    $y = & $drawWrapped ('Table: ' + [string]$script:r.table) $normal $left $y ($right - $left) $false 14
+    $y += 3
 
     $g.DrawLine(
       [System.Drawing.Pens]::Black,
@@ -738,15 +734,7 @@ $doc.add_PrintPage({
 
     foreach ($item in $script:r.items) {
 
-      $g.DrawString(
-        [string]$item.name,
-        $bold,
-        $black,
-        $left,
-        $y
-      )
-
-      $y += 13
+      $y = & $drawWrapped ([string]$item.name) $bold $left $y ($right - $left) $false 14
 
       $g.DrawString(
         (
@@ -876,15 +864,7 @@ $doc.add_PrintPage({
 
     if ([string]$script:r.note) {
 
-      $g.DrawString(
-        ('Note: ' + [string]$script:r.note),
-        $small,
-        $black,
-        $left,
-        $y
-      )
-
-      $y += 15
+      $y = & $drawWrapped ('Note: ' + [string]$script:r.note) $small $left $y ($right - $left) $false 13
     }
 
     # --------------------------------
@@ -971,16 +951,7 @@ $doc.add_PrintPage({
 
       $y += $size + 12
 
-      $g.DrawString(
-        ('UPI ID: ' + [string]$script:r.vpa),
-        $small,
-        $black,
-        [single]114,
-        [single]$y,
-        $center
-      )
-
-      $y += 16
+      $y = & $drawWrapped ('UPI ID: ' + [string]$script:r.vpa) $small $left $y ($right - $left) $true 13
 
     } else {
 
@@ -1014,25 +985,9 @@ $doc.add_PrintPage({
 
     $y += 9
 
-    $g.DrawString(
-      [string]$script:r.footer,
-      $head,
-      $black,
-      [single]114,
-      [single]$y,
-      $center
-    )
+    $y = & $drawWrapped ([string]$script:r.footer) $head $left $y ($right - $left) $true 15
 
-    $y += 16
-
-    $g.DrawString(
-      'Powered by Club Deal',
-      $small,
-      $black,
-      [single]114,
-      [single]$y,
-      $center
-    )
+    $y = & $drawWrapped 'Powered by Club Deal' $small $left $y ($right - $left) $true 13
 
     $brand.Dispose()
     $head.Dispose()

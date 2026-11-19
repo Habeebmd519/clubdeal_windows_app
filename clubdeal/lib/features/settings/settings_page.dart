@@ -109,7 +109,7 @@ class SettingsPage extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Select the printer installed in Windows. Connect the POS58 by USB and install its Windows driver first.',
+                        'Select a printer installed in Windows. For Wi-Fi printing, first add the printer as a Windows shared/network printer (or install a compatible Wi-Fi print server), then refresh this list. The app prints through the Windows printer queue; it does not require Bluetooth.',
                         style: TextStyle(color: AppColors.cream2, fontSize: 12),
                       ),
                       const SizedBox(height: 12),
