@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -128,9 +129,7 @@ class NetworkEscPosPrinter {
     _rule(bytes);
     _pair(bytes, 'Subtotal', 'Rs.${order.total.toStringAsFixed(2)}');
     _bold(bytes, true);
-    _large(bytes, true);
     _pair(bytes, 'GRAND TOTAL', 'Rs.${order.total.toStringAsFixed(2)}');
-    _large(bytes, false);
     _bold(bytes, false);
 
     _center(bytes);
@@ -264,6 +263,10 @@ class NetworkEscPosPrinter {
     } on SocketException catch (error) {
       throw StateError(
         'Could not reach network printer at $host:$port. Check its Wi-Fi, IP address and RAW/ESC-POS port. Details: $error',
+      );
+    } on TimeoutException {
+      throw StateError(
+        'Network printer at $host:$port did not respond before the timeout. Check the IP address and printer network status.',
       );
     } finally {
       await socket?.close();
