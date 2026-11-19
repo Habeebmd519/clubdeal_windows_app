@@ -110,6 +110,19 @@ class PrinterService extends ChangeNotifier {
     );
   }
 
+  Future<void> _withNetworkPrinter(
+    Future<void> Function(NetworkEscPosPrinter printer) action,
+  ) async {
+    try {
+      await action(_networkPrinter);
+      lastError = null;
+    } catch (error) {
+      lastError = error.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   NetworkEscPosPrinter get _networkPrinter {
     if (!useNetworkPrinter || !isConnected) {
       throw StateError('Configure and enable a Wi-Fi/network printer in Settings.');
@@ -206,7 +219,7 @@ try {
         }
       }
 
-      if (printers.isEmpty) {
+      if (printers.isEmpty && !useNetworkPrinter) {
         lastError = 'No Windows printers found. Install the printer driver.';
       }
     } catch (e) {
@@ -259,8 +272,7 @@ try {
 
   Future<void> testPrint() async {
     if (usesNetworkPrinter) {
-      await _networkPrinter.printTest();
-      lastError = null;
+      await _withNetworkPrinter((printer) => printer.printTest());
       return;
     }
     await _printTextTicket(_requirePrinter(), [
@@ -284,7 +296,9 @@ try {
     bool revised = false,
   }) async {
     if (usesNetworkPrinter) {
-      await _networkPrinter.printKitchenTicket(order, revised: revised);
+      await _withNetworkPrinter(
+        (printer) => printer.printKitchenTicket(order, revised: revised),
+      );
       return;
     }
     final lines = <String>[
@@ -315,7 +329,9 @@ try {
     String reason,
   ) async {
     if (usesNetworkPrinter) {
-      await _networkPrinter.printCancellationTicket(order, reason);
+      await _withNetworkPrinter(
+        (printer) => printer.printCancellationTicket(order, reason),
+      );
       return;
     }
     final name = selectedPrinterName;
@@ -383,13 +399,14 @@ try {
     final paidBy = paymentMethod ?? order.paymentMethod;
 
     if (usesNetworkPrinter) {
-      await _networkPrinter.printOrder(
-        order,
-        paymentMethod: paidBy,
-        vpa: vpa,
-        upiUri: upiUri,
+      await _withNetworkPrinter(
+        (printer) => printer.printOrder(
+          order,
+          paymentMethod: paidBy,
+          vpa: vpa,
+          upiUri: upiUri,
+        ),
       );
-      lastError = null;
       return;
     }
 
