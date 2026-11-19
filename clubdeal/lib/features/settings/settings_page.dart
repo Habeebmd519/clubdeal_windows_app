@@ -109,10 +109,21 @@ class SettingsPage extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Select a printer installed in Windows. For Wi-Fi printing, first add the printer as a Windows shared/network printer (or install a compatible Wi-Fi print server), then refresh this list. The app prints through the Windows printer queue; it does not require Bluetooth.',
+                        'Choose the existing Windows printer queue or enable direct Wi-Fi/Ethernet printing below. Direct mode is for ESC/POS thermal printers that accept RAW TCP printing (usually port 9100) on the same network. USB/Bluetooth-only printers need a compatible Wi-Fi print server or Windows sharing.',
                         style: TextStyle(color: AppColors.cream2, fontSize: 12),
                       ),
                       const SizedBox(height: 12),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Use direct Wi-Fi / Network printer'),
+                        subtitle: const Text(
+                          'Send tickets directly to an ESC/POS printer by IP address. Turn off to return to the existing Windows printer queue.',
+                        ),
+                        value: printer.useNetworkPrinter,
+                        onChanged: printer.setUseNetworkPrinter,
+                      ),
+                      _NetworkPrinterPanel(service: printer),
+                      const Divider(color: AppColors.border),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
                         title: const Text(
@@ -188,7 +199,9 @@ class SettingsPage extends StatelessWidget {
                                           .showSnackBar(
                                             const SnackBar(
                                               content: Text(
-                                                'Test receipt sent to Windows print queue.',
+                                                printer.usesNetworkPrinter
+                                                    ? 'Test receipt sent to network printer.'
+                                                    : 'Test receipt sent to Windows print queue.',
                                               ),
                                             ),
                                           );
@@ -209,7 +222,7 @@ class SettingsPage extends StatelessWidget {
                           ),
                           StatusPill(
                             text: printer.isConnected
-                                ? 'READY'
+                                ? (printer.usesNetworkPrinter ? 'NETWORK READY' : 'READY')
                                 : 'NOT CONNECTED',
                             color: printer.isConnected
                                 ? AppColors.success
@@ -249,6 +262,123 @@ class SettingsPage extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _NetworkPrinterPanel extends StatefulWidget {
+  const _NetworkPrinterPanel({required this.service});
+  final PrinterService service;
+
+  @override
+  State<_NetworkPrinterPanel> createState() => _NetworkPrinterPanelState();
+}
+
+class _NetworkPrinterPanelState extends State<_NetworkPrinterPanel> {
+  late final TextEditingController _hostController;
+  late final TextEditingController _portController;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _hostController = TextEditingController(text: widget.service.networkHost);
+    _portController = TextEditingController(text: widget.service.networkPort.toString());
+  }
+
+  @override
+  void dispose() {
+    _hostController.dispose();
+    _portController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final port = int.tryParse(_portController.text.trim());
+    if (port == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid printer port.')),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await widget.service.configureNetworkPrinter(
+        host: _hostController.text,
+        port: port,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Network printer saved and enabled. Use Test Print to verify it.'),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save network printer: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8, right: 8, bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _hostController,
+                  keyboardType: TextInputType.url,
+                  decoration: const InputDecoration(
+                    labelText: 'Printer IP address / host',
+                    hintText: '192.168.1.100',
+                    prefixIcon: Icon(Icons.wifi, size: 18),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 104,
+                child: TextField(
+                  controller: _portController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Port',
+                    hintText: '9100',
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Find the printer IP in its network settings or router device list. The printer and PC must be on the same Wi-Fi/LAN. Port 9100 is the common RAW ESC/POS port; use the port shown by your printer if different.',
+            style: TextStyle(color: AppColors.cream2, fontSize: 11, height: 1.4),
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.icon(
+              onPressed: _saving ? null : _save,
+              icon: _saving
+                  ? const SizedBox(
+                      width: 15,
+                      height: 15,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save_outlined, size: 17),
+              label: Text(_saving ? 'Saving...' : 'Save & Enable Wi-Fi Printer'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
