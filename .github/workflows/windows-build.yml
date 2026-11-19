@@ -5,6 +5,7 @@ on:
     branches:
       - feature/restaurant-operations
       - fix/restaurant-operations-receipt-layout
+      - feat/wifi-network-thermal-printing
   workflow_dispatch:
 
 jobs:

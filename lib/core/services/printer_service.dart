@@ -8,6 +8,7 @@ import 'package:qr/qr.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/order_model.dart';
+import 'network_escpos_printer.dart';
 
 class WindowsPrinter {
   final String name;
@@ -23,6 +24,9 @@ class PrinterService extends ChangeNotifier {
 
   static const _printerKey = 'clubdeal_windows_printer_name';
   static const _autoPrintKey = 'clubdeal_auto_print_new_orders';
+  static const _networkHostKey = 'clubdeal_network_printer_host';
+  static const _networkPortKey = 'clubdeal_network_printer_port';
+  static const _networkEnabledKey = 'clubdeal_use_network_printer';
 
   List<WindowsPrinter> printers = const [];
 
@@ -30,12 +34,18 @@ class PrinterService extends ChangeNotifier {
 
   bool isLoading = false;
   bool autoPrintNewOrders = true;
+  String networkHost = '';
+  int networkPort = 9100;
+  bool useNetworkPrinter = false;
 
   String? lastError;
 
-  bool get isConnected =>
-      selectedPrinterName != null &&
-      printers.any((p) => p.name == selectedPrinterName);
+  bool get usesNetworkPrinter => useNetworkPrinter;
+
+  bool get isConnected => useNetworkPrinter
+      ? networkHost.trim().isNotEmpty && networkPort >= 1 && networkPort <= 65535
+      : selectedPrinterName != null &&
+          printers.any((p) => p.name == selectedPrinterName);
 
   // --------------------------------------------------
   // INITIALIZATION
@@ -53,9 +63,71 @@ class PrinterService extends ChangeNotifier {
       selectedPrinterName = p.getString(_printerKey);
 
       autoPrintNewOrders = p.getBool(_autoPrintKey) ?? true;
+      networkHost = p.getString(_networkHostKey) ?? '';
+      networkPort = p.getInt(_networkPortKey) ?? 9100;
+      useNetworkPrinter = p.getBool(_networkEnabledKey) ?? false;
 
       notifyListeners();
     } catch (_) {}
+  }
+
+  /// Save a direct Wi-Fi/Ethernet ESC/POS printer endpoint and enable it.
+  Future<void> configureNetworkPrinter({
+    required String host,
+    required int port,
+  }) async {
+    final normalizedHost = host.trim();
+    final isIpAddress = InternetAddress.tryParse(normalizedHost) != null;
+    final isHostname = RegExp(
+      r'^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?$',
+    ).hasMatch(normalizedHost);
+
+    if (!isIpAddress && !isHostname) {
+      throw const FormatException('Enter a valid printer IP address or host name.');
+    }
+    if (port < 1 || port > 65535) {
+      throw const FormatException('Port must be between 1 and 65535.');
+    }
+
+    networkHost = normalizedHost;
+    networkPort = port;
+    useNetworkPrinter = true;
+    lastError = null;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_networkHostKey, networkHost);
+    await prefs.setInt(_networkPortKey, networkPort);
+    await prefs.setBool(_networkEnabledKey, true);
+    notifyListeners();
+  }
+
+  void setUseNetworkPrinter(bool enabled) {
+    useNetworkPrinter = enabled;
+    lastError = null;
+    notifyListeners();
+    SharedPreferences.getInstance().then(
+      (prefs) => prefs.setBool(_networkEnabledKey, enabled),
+    );
+  }
+
+  Future<void> _withNetworkPrinter(
+    Future<void> Function(NetworkEscPosPrinter printer) action,
+  ) async {
+    try {
+      await action(_networkPrinter);
+      lastError = null;
+    } catch (error) {
+      lastError = error.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  NetworkEscPosPrinter get _networkPrinter {
+    if (!useNetworkPrinter || !isConnected) {
+      throw StateError('Configure and enable a Wi-Fi/network printer in Settings.');
+    }
+    return NetworkEscPosPrinter(host: networkHost.trim(), port: networkPort);
   }
 
   // --------------------------------------------------
@@ -147,7 +219,7 @@ try {
         }
       }
 
-      if (printers.isEmpty) {
+      if (printers.isEmpty && !useNetworkPrinter) {
         lastError = 'No Windows printers found. Install the printer driver.';
       }
     } catch (e) {
@@ -198,8 +270,12 @@ try {
   // TEST PRINT
   // --------------------------------------------------
 
-  Future<void> testPrint() {
-    return _printTextTicket(_requirePrinter(), [
+  Future<void> testPrint() async {
+    if (usesNetworkPrinter) {
+      await _withNetworkPrinter((printer) => printer.printTest());
+      return;
+    }
+    await _printTextTicket(_requirePrinter(), [
       'CLUB DEAL',
       'KOCHI',
       '58MM PRINTER TEST',
@@ -219,6 +295,12 @@ try {
     RestaurantOrder order, {
     bool revised = false,
   }) async {
+    if (usesNetworkPrinter) {
+      await _withNetworkPrinter(
+        (printer) => printer.printKitchenTicket(order, revised: revised),
+      );
+      return;
+    }
     final lines = <String>[
       'CLUB DEAL - KITCHEN',
       revised ? 'UPDATED KITCHEN TICKET' : 'KITCHEN ORDER TICKET',
@@ -246,6 +328,12 @@ try {
     RestaurantOrder order,
     String reason,
   ) async {
+    if (usesNetworkPrinter) {
+      await _withNetworkPrinter(
+        (printer) => printer.printCancellationTicket(order, reason),
+      );
+      return;
+    }
     final name = selectedPrinterName;
 
     if (name == null || !isConnected) return;
@@ -271,15 +359,16 @@ try {
     RestaurantOrder order, {
     PaymentMethod? paymentMethod,
   }) async {
-    final printer = _requirePrinter();
+    final printer = usesNetworkPrinter ? null : _requirePrinter();
 
     final vpa = await _loadPaymentVpa();
 
     List<List<bool>>? matrix;
+    String? upiUri;
 
     // Generate QR with exact order amount.
     if (vpa != null && order.total > 0) {
-      final uri = Uri(
+      upiUri = Uri(
         scheme: 'upi',
         host: 'pay',
         queryParameters: {
@@ -293,7 +382,7 @@ try {
       ).toString();
 
       final code = QrCode.fromData(
-        data: uri,
+        data: upiUri!,
         errorCorrectLevel: QrErrorCorrectLevel.M,
       );
 
@@ -309,7 +398,19 @@ try {
 
     final paidBy = paymentMethod ?? order.paymentMethod;
 
-    await _printReceipt(printer, {
+    if (usesNetworkPrinter) {
+      await _withNetworkPrinter(
+        (printer) => printer.printOrder(
+          order,
+          paymentMethod: paidBy,
+          vpa: vpa,
+          upiUri: upiUri,
+        ),
+      );
+      return;
+    }
+
+    await _printReceipt(printer!, {
       'kind': 'bill',
 
       // BUSINESS HEADER
