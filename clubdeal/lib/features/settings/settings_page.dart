@@ -181,6 +181,8 @@ class SettingsPage extends StatelessWidget {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 14),
+                      _UpiIdEditor(printer: printer),
                       if (printer.lastError != null) ...[
                         const SizedBox(height: 8),
                         Text(printer.lastError!,
@@ -242,6 +244,74 @@ class _Section extends StatelessWidget {
           child,
         ],
       ),
+    );
+  }
+}
+
+
+class _UpiIdEditor extends StatefulWidget {
+  final PrinterService printer;
+  const _UpiIdEditor({required this.printer});
+
+  @override
+  State<_UpiIdEditor> createState() => _UpiIdEditorState();
+}
+
+class _UpiIdEditorState extends State<_UpiIdEditor> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.printer.upiId);
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      await widget.printer.saveUpiId(_controller.text);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('UPI ID saved. New receipts will contain an amount-specific payment QR.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save UPI ID: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _controller,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(
+            labelText: 'UPI ID for receipt QR',
+            hintText: 'yourname@bank',
+            helperText: 'The QR includes the order total. Verify this UPI ID before accepting payments.',
+            prefixIcon: Icon(Icons.qr_code_2),
+          ),
+          onSubmitted: (_) => _save(),
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerRight,
+          child: OutlinedButton.icon(
+            onPressed: _saving ? null : _save,
+            icon: const Icon(Icons.save_outlined, size: 17),
+            label: Text(_saving ? 'Saving...' : 'Save UPI ID'),
+          ),
+        ),
+      ],
     );
   }
 }
