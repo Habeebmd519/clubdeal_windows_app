@@ -274,7 +274,9 @@ class PrinterService extends ChangeNotifier {
   static const List<int> _boldOff = [0x1B, 0x45, 0x00];
   static const List<int> _cut = [0x1D, 0x56, 0x00];
 
-  List<int> _ascii(String value) => ascii.encode(value);
+  List<int> _ascii(String value) => ascii.encode(
+    value.replaceAll(RegExp(r'[^\\x00-\\x7F]'), '?'),
+  );
   String _money(double value) => value.toStringAsFixed(0);
 
   Future<void> _send(Printer printer, List<int> bytes, {
