@@ -3,57 +3,55 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
+import 'package:printing_ffi/printing_ffi.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/order_model.dart';
 
-class WindowsPrinter {
-  final String name;
-  final bool isDefault;
-  const WindowsPrinter(this.name, {this.isDefault = false});
-}
-
-/// Uses the Windows-installed printer driver. The POS58 should be installed
-/// in Windows first; USB printers are not Bluetooth devices in this workflow.
+/// Raw ESC/POS printing for 58 mm POS58 thermal printers.
 class PrinterService extends ChangeNotifier {
-  PrinterService() {
-    _initialize();
-  }
+  PrinterService() { _initialize(); }
+
+  static const _printerKey = 'clubdeal_windows_printer_name';
+  static const _autoPrintKey = 'clubdeal_auto_print_new_orders';
+  static const _upiKey = 'clubdeal_receipt_upi_id';
+  static const int _columns = 32;
+  static const String _separator = '--------------------------------';
+
+  final PrintingFfi _printing = PrintingFfi.instance;
+  List<Printer> printers = const [];
+  String? selectedPrinterName;
+  bool isLoading = false;
+  bool autoPrintNewOrders = true;
+  String? lastError;
+  String upiId = '';
 
   Future<void> _initialize() async {
     await _loadPreferences();
     await refreshPrinters();
   }
 
-  static const _printerKey = 'clubdeal_windows_printer_name';
-  static const _autoPrintKey = 'clubdeal_auto_print_new_orders';
-
   Future<void> _loadPreferences() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       selectedPrinterName = prefs.getString(_printerKey);
       autoPrintNewOrders = prefs.getBool(_autoPrintKey) ?? true;
+      upiId = prefs.getString(_upiKey) ?? '';
       notifyListeners();
-    } catch (_) {
-      // Continue with defaults if preferences are unavailable.
+    } catch (error) {
+      lastError = 'Could not load printer settings: $error';
+      notifyListeners();
     }
   }
 
-  List<WindowsPrinter> printers = const [];
-  String? selectedPrinterName;
-  bool isLoading = false;
-  bool autoPrintNewOrders = true;
-  String? lastError;
-
-  bool get isConnected =>
-      selectedPrinterName != null &&
-      printers.any((p) => p.name == selectedPrinterName);
+  bool get isConnected => selectedPrinterName != null &&
+      printers.any((p) => p.name == selectedPrinterName && p.isAvailable);
 
   Future<void> refreshPrinters() async {
     if (!Platform.isWindows) {
       printers = const [];
-      lastError =
-          'Windows printing is available only in the Windows desktop build.';
+      lastError = 'Thermal printing is available only in the Windows desktop build.';
       notifyListeners();
       return;
     }
@@ -61,212 +59,240 @@ class PrinterService extends ChangeNotifier {
     lastError = null;
     notifyListeners();
     try {
-      const script = r'''
-$ErrorActionPreference = 'Stop'
-try {
-  $items = @(Get-CimInstance Win32_Printer | ForEach-Object {
-    [PSCustomObject]@{ name = $_.Name; isDefault = [bool]$_.Default }
-  })
-  ConvertTo-Json -InputObject $items -Compress
-} catch {
-  Add-Type -AssemblyName System.Drawing
-  $items = @()
-  foreach ($name in [System.Drawing.Printing.PrinterSettings]::InstalledPrinters) {
-    $items += [PSCustomObject]@{ name = [string]$name; isDefault = $false }
-  }
-  ConvertTo-Json -InputObject $items -Compress
-}
-''';
-      final result = await _runPowerShell(script);
-      final output = result.stdout.toString().trim();
-      final decoded = output.isEmpty ? <dynamic>[] : jsonDecode(output);
-      final rows = decoded is List ? decoded : [decoded];
-      printers =
-          rows
-              .whereType<Map>()
-              .map(
-                (row) => WindowsPrinter(
-                  '${row['name'] ?? ''}',
-                  isDefault: row['isDefault'] == true,
-                ),
-              )
-              .where((p) => p.name.isNotEmpty)
-              .toList()
-            ..sort((a, b) => a.name.compareTo(b.name));
-
+      printers = _printing.listPrinters();
       if (selectedPrinterName == null ||
           !printers.any((p) => p.name == selectedPrinterName)) {
         final defaults = printers.where((p) => p.isDefault);
         selectedPrinterName = defaults.isNotEmpty
             ? defaults.first.name
             : (printers.isNotEmpty ? printers.first.name : null);
-        if (selectedPrinterName != null) {
-          SharedPreferences.getInstance().then(
-            (prefs) => prefs.setString(_printerKey, selectedPrinterName!),
-          );
-        }
+      }
+      final prefs = await SharedPreferences.getInstance();
+      if (selectedPrinterName != null) {
+        await prefs.setString(_printerKey, selectedPrinterName!);
       }
       if (printers.isEmpty) {
-        lastError = 'No Windows printers found. Install the printer driver and reconnect it.';
+        lastError = 'No Windows printers found. Install the POS58 driver, reconnect the printer and refresh.';
       }
-    } catch (e) {
-      lastError = 'Could not list Windows printers: $e';
+    } catch (error) {
+      printers = const [];
+      lastError = 'Could not list Windows printers: $error';
     } finally {
       isLoading = false;
       notifyListeners();
     }
   }
 
-  void selectPrinter(String? name) {
+  Future<void> selectPrinter(String? name) async {
     selectedPrinterName = name;
     lastError = null;
+    final prefs = await SharedPreferences.getInstance();
+    if (name == null) {
+      await prefs.remove(_printerKey);
+    } else {
+      await prefs.setString(_printerKey, name);
+    }
     notifyListeners();
-    SharedPreferences.getInstance().then((prefs) {
-      if (name == null) {
-        prefs.remove(_printerKey);
-      } else {
-        prefs.setString(_printerKey, name);
-      }
-    });
   }
 
-  void setAutoPrintNewOrders(bool enabled) {
+  Future<void> setAutoPrintNewOrders(bool enabled) async {
     autoPrintNewOrders = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_autoPrintKey, enabled);
     notifyListeners();
-    SharedPreferences.getInstance().then(
-      (prefs) => prefs.setBool(_autoPrintKey, enabled),
-    );
+  }
+
+  Future<void> saveUpiId(String value) async {
+    final normalized = value.trim();
+    if (normalized.isNotEmpty &&
+        !RegExp(r'^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+$').hasMatch(normalized)) {
+      throw const FormatException('Enter a valid UPI ID, for example name@bank.');
+    }
+    upiId = normalized;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_upiKey, normalized);
+    notifyListeners();
+  }
+
+  Printer _requirePrinter() {
+    if (!Platform.isWindows) {
+      throw UnsupportedError('Thermal printing is supported in the Windows desktop app.');
+    }
+    final name = selectedPrinterName;
+    if (name == null) {
+      throw StateError('Select your POS58 printer in Settings first.');
+    }
+    for (final printer in printers) {
+      if (printer.name == name) {
+        if (!printer.isAvailable) {
+          throw StateError('Printer "$name" is offline. Check its power and USB connection.');
+        }
+        return printer;
+      }
+    }
+    throw StateError('Printer "$name" is not available. Refresh the printer list.');
   }
 
   Future<void> testPrint() async {
-    final name = selectedPrinterName;
-    if (name == null || !isConnected) {
-      throw StateError('Select an installed Windows printer first.');
-    }
-    await _printLines(name, [
-      'CLUB DEAL',
-      'PRINTER TEST',
-      '------------------------------',
-      'POS printer is connected.',
-      'Test print successful.',
-      DateTime.now().toString(),
-      '',
-      '',
-    ]);
+    final printer = _requirePrinter();
+    final bytes = <int>[
+      ..._initializePrinter, ..._center, ..._boldOn,
+      ..._ascii('CLUB DEAL'), ..._boldOff,
+      ..._ascii('58 mm THERMAL PRINTER TEST'),
+      ..._left, ..._ascii(_separator),
+      ..._ascii('Printer: ${printer.name}'),
+      ..._ascii('32-column receipt layout'),
+      ..._ascii('Test print successful.'),
+      ..._ascii(_separator), ..._center, ..._ascii('Thank you!'),
+      0x0A, 0x0A, 0x0A, ..._cut,
+    ];
+    await _send(printer, bytes, jobName: 'Club Deal printer test');
   }
 
   Future<void> printOrder(RestaurantOrder order) async {
-    final name = selectedPrinterName;
-    if (name == null || !isConnected) {
-      throw StateError('Select an installed Windows printer in Settings.');
-    }
-    final lines = <String>[
-      'CLUB DEAL',
-      'ORDER BILL',
-      '------------------------------',
-      'Order: ${order.id}',
-      'Customer: ${order.customerName}',
-      if (order.phone.isNotEmpty) 'Phone: ${order.phone}',
-      'Table: ${order.table}',
-      'Status: ${order.status.name.toUpperCase()}',
-      if (order.createdAt != null) 'Date: ${order.createdAt}',
-      '------------------------------',
-      'ITEM             QTY       AMT',
-      ...order.items.map(
-        (item) =>
-            '${item.name}  x${item.qty}  Rs.${item.total.toStringAsFixed(2)}',
-      ),
-      '------------------------------',
-      'TOTAL: Rs.${order.total.toStringAsFixed(2)}',
-      if (order.note.trim().isNotEmpty) 'Note: ${order.note}',
-      '',
-      'Thank you!',
-      '',
-      '',
+    final printer = _requirePrinter();
+    final created = order.createdAt ?? DateTime.now();
+    final bytes = <int>[
+      ..._initializePrinter, ..._center, ..._boldOn,
+      ..._ascii('CLUB DEAL'), ..._boldOff,
+      ..._ascii('Kochi'),
+      ..._ascii('Kaloor - Kadavanthra Road'),
+      ..._ascii('Kathrikadavu, Opp. Popees'),
+      ..._ascii('kochiclubdeal@gmail.com'),
+      ..._ascii('+91 95622 08806'),
+      ..._ascii('+91 96057 91139'),
+      ..._left, ..._ascii(_separator),
+      ..._pair('Bill', order.id),
+      ..._pair('Date', DateFormat('dd MMM yyyy').format(created)),
+      ..._pair('Time', DateFormat('hh:mm a').format(created)),
+      ..._ascii(_separator),
+      ..._formatItems(order.items),
+      ..._ascii(_separator),
+      ..._boldOn, ..._pair('TOTAL', 'Rs ${_money(order.total)}'), ..._boldOff,
+      if (order.note.trim().isNotEmpty) ...[
+        ..._ascii(_separator), ..._wrap('Note: ${order.note}'),
+      ],
+      0x0A, ..._center,
+      ..._ascii('Thank you! Visit again.'),
+      ..._ascii('Powered by Club Deal'),
+      0x0A, ..._boldOn, ..._ascii('SCAN TO PAY'), ..._boldOff,
+      ..._ascii('Amount: Rs ${_money(order.total)}'),
+      if (upiId.isNotEmpty) ...[
+        ..._ascii(upiId), ..._qrCode(_upiPayload(order)),
+      ] else ...[
+        ..._ascii('UPI ID not configured'),
+        ..._ascii('Set UPI ID in Settings to print QR'),
+      ],
+      0x0A, 0x0A, 0x0A, ..._cut,
     ];
-    await _printLines(name, lines);
+    await _send(printer, bytes, jobName: 'Club Deal receipt ${order.id}');
   }
 
-  Future<void> _printLines(String printerName, List<String> lines) async {
-    if (!Platform.isWindows) {
-      throw UnsupportedError(
-        'Printing is supported in the Windows desktop app.',
-      );
+  List<int> _formatItems(List<OrderItem> items) {
+    final output = <int>[];
+    for (final item in items) {
+      output.addAll(_wrap(item.name));
+      output.addAll(_ascii(_fitPair(
+        '${item.qty} x Rs ${_money(item.price)}',
+        'Rs ${_money(item.total)}',
+      )));
     }
-    final payload = base64Encode(utf8.encode(jsonEncode(lines)));
-    final printer = base64Encode(utf8.encode(printerName));
-    final script =
-        r'''
-$ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName System.Drawing
-$printerName = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__PRINTER__'))
-$lines = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__LINES__')) | ConvertFrom-Json
-$doc = New-Object System.Drawing.Printing.PrintDocument
-$doc.PrinterSettings.PrinterName = $printerName
-if (-not $doc.PrinterSettings.IsValid) { throw "Printer not available: $printerName" }
-$doc.DocumentName = 'Club Deal Receipt'
-$doc.DefaultPageSettings.Margins = New-Object System.Drawing.Printing.Margins(8,8,8,8)
-$script:receiptLines = @($lines)
-$doc.add_PrintPage({
-  param($sender, $e)
-  $font = New-Object System.Drawing.Font('Consolas', 8)
-  $y = 8
-  foreach ($line in $script:receiptLines) {
-    $e.Graphics.DrawString([string]$line, $font, [System.Drawing.Brushes]::Black, 5, $y)
-    $y += 14
+    return output;
   }
-  $font.Dispose()
-  $e.HasMorePages = $false
-})
-$doc.Print()
-$doc.Dispose()
-Write-Output 'PRINT_SUBMITTED'
-'''
-            .replaceAll('__PRINTER__', printer)
-            .replaceAll('__LINES__', payload);
-    try {
-      final result = await _runPowerShell(script);
-      if (!result.stdout.toString().contains('PRINT_SUBMITTED')) {
-        throw StateError(
-          result.stderr.toString().trim().isEmpty
-              ? 'Windows did not confirm the print job.'
-              : result.stderr.toString().trim(),
-        );
+
+  String _fitPair(String left, String right) {
+    final safeRight = right.length >= _columns
+        ? right.substring(right.length - _columns) : right;
+    final available = _columns - safeRight.length;
+    final safeLeft = left.length > available ? left.substring(0, available) : left;
+    return safeLeft.padRight(available) + safeRight;
+  }
+
+  List<int> _pair(String label, String value) => _ascii(_fitPair(label, value));
+
+  List<int> _wrap(String text) {
+    final words = text.replaceAll(RegExp(r'\s+'), ' ').trim().split(' ');
+    final lines = <String>[];
+    var line = '';
+    for (final word in words) {
+      if (word.isEmpty) continue;
+      if (word.length > _columns) {
+        if (line.isNotEmpty) { lines.add(line); line = ''; }
+        for (var start = 0; start < word.length; start += _columns) {
+          final end = (start + _columns).clamp(0, word.length);
+          lines.add(word.substring(start, end));
+        }
+        continue;
       }
-      lastError = null;
-    } catch (e) {
-      lastError = '$e';
+      final candidate = line.isEmpty ? word : '$line $word';
+      if (candidate.length > _columns) {
+        if (line.isNotEmpty) lines.add(line);
+        line = word;
+      } else {
+        line = candidate;
+      }
+    }
+    if (line.isNotEmpty) lines.add(line);
+    return <int>[for (final value in lines) ..._ascii(value)];
+  }
+
+  String _upiPayload(RestaurantOrder order) {
+    final params = <String, String>{
+      'pa': upiId, 'pn': 'Club Deal',
+      'am': order.total.toStringAsFixed(2), 'cu': 'INR',
+      'tn': 'Bill ${order.id}',
+    };
+    final query = params.entries.map((entry) =>
+      '${Uri.encodeQueryComponent(entry.key)}=${Uri.encodeQueryComponent(entry.value)}'
+    ).join('&');
+    return 'upi://pay?$query';
+  }
+
+  /// ESC/POS QR Code: model 2, module size 6, error correction M.
+  List<int> _qrCode(String value) {
+    final data = ascii.encode(value);
+    if (data.length > 700) {
+      throw StateError('UPI QR data is too long for this thermal printer.');
+    }
+    final length = data.length + 3;
+    final low = length & 0xff;
+    final high = (length >> 8) & 0xff;
+    return <int>[
+      0x1D, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00,
+      0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, 0x06,
+      0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x45, 0x31,
+      0x1D, 0x28, 0x6B, low, high, 0x31, 0x50, 0x30,
+      ...data,
+      0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30,
+    ];
+  }
+
+  static const List<int> _initializePrinter = [0x1B, 0x40];
+  static const List<int> _left = [0x1B, 0x61, 0x00];
+  static const List<int> _center = [0x1B, 0x61, 0x01];
+  static const List<int> _boldOn = [0x1B, 0x45, 0x01];
+  static const List<int> _boldOff = [0x1B, 0x45, 0x00];
+  static const List<int> _cut = [0x1D, 0x56, 0x00];
+
+  List<int> _ascii(String value) => ascii.encode(value);
+  String _money(double value) => value.toStringAsFixed(0);
+
+  Future<void> _send(Printer printer, List<int> bytes, {
+    required String jobName,
+  }) async {
+    lastError = null;
+    notifyListeners();
+    try {
+      final success = await _printing.rawDataToPrinter(
+        printer.name, Uint8List.fromList(bytes), docName: jobName,
+      );
+      if (!success) {
+        throw StateError('Windows could not send the receipt to ${printer.name}. Check the printer queue and connection.');
+      }
+    } catch (error) {
+      lastError = '$error';
       notifyListeners();
       rethrow;
     }
-  }
-
-  Future<ProcessResult> _runPowerShell(String script) async {
-    final units = script.codeUnits;
-    final utf16le = Uint8List(units.length * 2);
-    for (var i = 0; i < units.length; i++) {
-      utf16le[i * 2] = units[i] & 0xff;
-      utf16le[i * 2 + 1] = (units[i] >> 8) & 0xff;
-    }
-    final encoded = base64Encode(utf16le);
-    final result = await Process.run('powershell.exe', [
-      '-NoProfile',
-      '-NonInteractive',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-EncodedCommand',
-      encoded,
-    ], runInShell: false);
-    if (result.exitCode != 0) {
-      throw ProcessException(
-        'powershell.exe',
-        const [],
-        '${result.stderr}'.trim().isEmpty
-            ? '${result.stdout}'.trim()
-            : '${result.stderr}'.trim(),
-        result.exitCode,
-      );
-    }
-    return result;
   }
 }
