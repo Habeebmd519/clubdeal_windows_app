@@ -219,7 +219,9 @@ class PrinterService extends ChangeNotifier {
       if (word.length > _columns) {
         if (line.isNotEmpty) { lines.add(line); line = ''; }
         for (var start = 0; start < word.length; start += _columns) {
-          final end = (start + _columns).clamp(0, word.length);
+          final end = start + _columns < word.length
+              ? start + _columns
+              : word.length;
           lines.add(word.substring(start, end));
         }
         continue;
