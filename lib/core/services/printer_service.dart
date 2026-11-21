@@ -472,8 +472,9 @@ if ($r.items) {
 }
 
 # Extra tail feed so the QR code and final line clear the printer outlet.
-# PaperSize is in hundredths of an inch; 100 adds about 25 mm of blank paper.
-$height += 100
+# PaperSize is in hundredths of an inch; 200 adds about 51 mm of blank paper
+# after the receipt content so the final QR/footer can be pulled fully clear.
+$height += 200
 
 $doc.DefaultPageSettings.PaperSize =
   New-Object System.Drawing.Printing.PaperSize(
