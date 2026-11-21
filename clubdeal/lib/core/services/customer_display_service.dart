@@ -185,7 +185,7 @@ $ErrorActionPreference = 'Stop'
 $portName = '__PORT__'
 $baud = __BAUD__
 $data = [Convert]::FromBase64String('__BYTES__')
-$serial = New-Object System.IO.Ports.SerialPort(
+$serial = [System.IO.Ports.SerialPort]::new(
   $portName, $baud,
   [System.IO.Ports.Parity]::None,
   8,
