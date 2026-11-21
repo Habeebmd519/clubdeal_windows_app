@@ -47,10 +47,9 @@ Future<void> main() async {
                 MenuBloc(restaurantRepository)..add(const MenuStarted()),
           ),
           BlocProvider(
-            create: (_) => ExpenseBloc(expenseRepository)
-              ..add(
-                WatchExpenses(DateTime(2000, 1, 1)),
-              ),
+            create: (_) =>
+                ExpenseBloc(expenseRepository)
+                  ..add(WatchExpenses(DateTime(2000, 1, 1))),
           ),
           BlocProvider(
             create: (context) =>
@@ -58,7 +57,9 @@ Future<void> main() async {
                   ..add(const SettingsStarted()),
           ),
           BlocProvider(
-            create: (_) => StockBloc(repository: FirestoreStockRepository(FirebaseFirestore.instance)),
+            create: (_) => StockBloc(
+              repository: FirestoreStockRepository(FirebaseFirestore.instance),
+            ),
           ),
         ],
         child: const ClubDealDesktopApp(),
