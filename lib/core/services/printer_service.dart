@@ -332,14 +332,9 @@ try {
       // BILL DETAILS
       'billNo': order.id,
 
-      'date':
-          '${date.day.toString().padLeft(2, '0')}/'
-          '${date.month.toString().padLeft(2, '0')}/'
-          '${date.year}',
+      'date': DateFormat('dd MMM yyyy').format(date),
 
-      'time':
-          '${date.hour.toString().padLeft(2, '0')}:'
-          '${date.minute.toString().padLeft(2, '0')}',
+      'time': DateFormat('hh:mm a').format(date),
 
       'customer': order.customerName,
       'phone': order.phone,
@@ -481,10 +476,17 @@ if ($r.note) {
 }
 if ($r.kind -eq 'text') {
   $lineCount = @($r.lines).Count
+  foreach ($line in $r.lines) {
+    $lineLength = ([string]$line).Length
+    if ($lineLength -gt 30) {
+      $wrapExtra += ([Math]::Ceiling($lineLength / 30.0) - 1) * 14
+    }
+  }
   $height = 120 + ($lineCount * 18) + $wrapExtra
 } else {
-  $height = 475 + ($itemCount * 31) + $wrapExtra
-  if ($r.qr) { $height += 225 }
+  # Receipt content is compact: the QR block is included only when available.
+  $height = 330 + ($itemCount * 30) + $wrapExtra
+  if ($r.qr) { $height += 230 }
 }
 $height = [Math]::Max(260, [Math]::Min(3000, [int][Math]::Ceiling($height)))
 
@@ -634,6 +636,7 @@ $doc.add_PrintPage({
     # FOOTER COMES BEFORE THE QR, matching the proven Android receipt sequence.
     $y = Draw-WrappedText $g ([string]$script:r.footer) $head $left $y $contentWidth $centerFormat 2
     $y = Draw-WrappedText $g 'Powered by Club Deal' $small $left $y $contentWidth $centerFormat 5
+    $y = Draw-Rule $g $y $left $right
 
     # UPI QR IS THE LAST MAIN CONTENT. Keep a full four-module quiet zone.
     if ($script:r.qr) {
