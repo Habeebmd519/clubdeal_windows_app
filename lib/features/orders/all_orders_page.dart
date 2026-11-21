@@ -332,9 +332,18 @@ class _HistoryRowState extends State<_HistoryRow> {
     setState(() => printing = true);
     try {
       await context.read<PrinterService>().printOrder(widget.order);
+      var message = 'Bill sent to printer.';
+      try {
+        await context
+            .read<CustomerDisplayService>()
+            .showPrintedTotal(widget.order.total);
+        message = 'Bill printed. Customer display update command sent.';
+      } catch (displayError) {
+        message = 'Bill printed, but customer display update failed: $displayError';
+      }
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Bill sent to printer.')));
+          .showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
