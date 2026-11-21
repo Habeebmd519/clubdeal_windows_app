@@ -236,7 +236,7 @@ class SettingsPage extends StatelessWidget {
             const SizedBox(height: 14),
             const SizedBox(height: 14),
             _Section(
-              title: 'Customer Display — VFD / Serial',
+              title: 'Customer Display — Built-in LED / VFD',
               child: AnimatedBuilder(
                 animation: context.read<CustomerDisplayService>(),
                 builder: (context, _) {
@@ -255,15 +255,15 @@ class SettingsPage extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Optional serial 2-line customer display. This is separate from the POS58 receipt printer.',
+                        'Send the printed bill total to the built-in 8-character LED display, or use a separate 2-line VFD. This is separate from the receipt printer.',
                         style: TextStyle(color: AppColors.cream2, fontSize: 12),
                       ),
                       const SizedBox(height: 8),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: const Text('Enable VFD customer display'),
+                        title: const Text('Enable customer display'),
                         subtitle: const Text(
-                          'When an order is opened, send its last item and total. Payment confirmation sends the paid total.',
+                          'After a customer receipt prints, send the bill total to the display.',
                         ),
                         value: display.enabled,
                         onChanged: display.setEnabled,
@@ -324,11 +324,15 @@ class SettingsPage extends StatelessWidget {
                           Expanded(
                             child: DropdownButtonFormField<CustomerDisplayProtocol>(
                               value: display.protocol,
-                              decoration: const InputDecoration(labelText: 'VFD command set'),
+                              decoration: const InputDecoration(labelText: 'Display mode'),
                               items: const [
                                 DropdownMenuItem(
+                                  value: CustomerDisplayProtocol.zktecoLed8Digit,
+                                  child: Text('Built-in 8-digit LED'),
+                                ),
+                                DropdownMenuItem(
                                   value: CustomerDisplayProtocol.cd5220,
-                                  child: Text('CD5220'),
+                                  child: Text('CD5220 VFD'),
                                 ),
                                 DropdownMenuItem(
                                   value: CustomerDisplayProtocol.escPos,
