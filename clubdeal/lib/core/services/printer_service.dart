@@ -381,10 +381,6 @@ try {
   Future<String?> _loadPaymentVpa() async {
     try {
       final db = FirebaseFirestore.instance;
-
-      // Keep the Windows app's existing config path first. The Android
-      // print service uses the legacy "app_confige" collection, so check
-      // that path as a compatibility fallback before hiding the QR.
       var doc = await db.collection('app_config').doc('paymentBankId').get();
       var value = doc.data()?['bankId']?.toString().trim();
 
@@ -395,9 +391,6 @@ try {
 
       if (value == null ||
           !RegExp(r'^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+
-    } catch (_) {
-      return null;
-    }
   }
 
   // --------------------------------------------------
@@ -437,269 +430,574 @@ try {
     final script =
         r'''
 $ErrorActionPreference = 'Stop'
+
 Add-Type -AssemblyName System.Drawing
 
 $printerName = [Text.Encoding]::UTF8.GetString(
   [Convert]::FromBase64String('__PRINTER__')
 )
+
 $r = [Text.Encoding]::UTF8.GetString(
   [Convert]::FromBase64String('__DATA__')
 ) | ConvertFrom-Json
 
 $doc = New-Object System.Drawing.Printing.PrintDocument
+
 $doc.PrinterSettings.PrinterName = $printerName
+
 if (-not $doc.PrinterSettings.IsValid) {
   throw "Printer not available: $printerName"
 }
+
 $doc.DocumentName = 'Club Deal Receipt'
+
 $doc.DefaultPageSettings.Margins =
   New-Object System.Drawing.Printing.Margins(0,0,0,0)
 
-# Size the roll for the actual content instead of reserving a large fixed
-# blank tail. Add extra height for long names, addresses and kitchen notes.
-$itemCount = 0
-$wrapExtra = 0
+# EXTRA HEIGHT FOR BUSINESS HEADER AND QR
+$height = 900
+
 if ($r.items) {
-  $itemCount = @($r.items).Count
-  foreach ($item in $r.items) {
-    $nameLength = ([string]$item.name).Length
-    if ($nameLength -gt 30) {
-      $wrapExtra += ([Math]::Ceiling($nameLength / 30.0) - 1) * 14
-    }
+  $height = 850 + (@($r.items).Count * 58)
+
+  if ($r.qr) {
+    $height += 210
   }
 }
-if ($r.note) {
-  $noteLength = ([string]$r.note).Length
-  if ($noteLength -gt 30) {
-    $wrapExtra += ([Math]::Ceiling($noteLength / 30.0) - 1) * 14
-  }
-}
-if ($r.kind -eq 'text') {
-  $lineCount = @($r.lines).Count
-  foreach ($line in $r.lines) {
-    $lineLength = ([string]$line).Length
-    if ($lineLength -gt 30) {
-      $wrapExtra += ([Math]::Ceiling($lineLength / 30.0) - 1) * 14
-    }
-  }
-  $height = 120 + ($lineCount * 18) + $wrapExtra
-} else {
-  # Receipt content is compact: the QR block is included only when available.
-  $height = 330 + ($itemCount * 30) + $wrapExtra
-  if ($r.qr) { $height += 230 }
-}
-$height = [Math]::Max(260, [Math]::Min(3000, [int][Math]::Ceiling($height)))
 
 $doc.DefaultPageSettings.PaperSize =
-  New-Object System.Drawing.Printing.PaperSize('ClubDeal58mm', 228, $height)
+  New-Object System.Drawing.Printing.PaperSize(
+    'ClubDeal58mm',
+    228,
+    [Math]::Min(3000, $height)
+  )
 
 $script:r = $r
 
 $doc.add_PrintPage({
+
   param($sender,$e)
 
   $g = $e.Graphics
+
   $g.PageUnit = [System.Drawing.GraphicsUnit]::Display
+
   $width = 228
   $left = 8
   $right = 220
-  $contentWidth = $right - $left
   $y = 8
+
+  $center = New-Object System.Drawing.StringFormat
+  $center.Alignment = [System.Drawing.StringAlignment]::Center
+
+  $rf = New-Object System.Drawing.StringFormat
+  $rf.Alignment = [System.Drawing.StringAlignment]::Far
+
   $black = [System.Drawing.Brushes]::Black
 
-  $leftFormat = New-Object System.Drawing.StringFormat
-  $leftFormat.Alignment = [System.Drawing.StringAlignment]::Near
-  $leftFormat.Trimming = [System.Drawing.StringTrimming]::Word
-
-  $centerFormat = New-Object System.Drawing.StringFormat
-  $centerFormat.Alignment = [System.Drawing.StringAlignment]::Center
-  $centerFormat.Trimming = [System.Drawing.StringTrimming]::Word
-
-  $rightFormat = New-Object System.Drawing.StringFormat
-  $rightFormat.Alignment = [System.Drawing.StringAlignment]::Far
-  $rightFormat.Trimming = [System.Drawing.StringTrimming]::Word
-
-  function Draw-WrappedText($graphics, [string]$text, $font, [single]$x,
-                            [single]$top, [single]$maxWidth, $format,
-                            [single]$gap = 2) {
-    if ([string]::IsNullOrWhiteSpace($text)) { return $top }
-    $measure = $graphics.MeasureString($text, $font, $maxWidth, $format)
-    $textHeight = [Math]::Max(11, [Math]::Ceiling($measure.Height))
-    $layout = New-Object System.Drawing.RectangleF(
-      $x, $top, $maxWidth, [single]2000
-    )
-    $graphics.DrawString($text, $font, $black, $layout, $format)
-    return [single]($top + $textHeight + $gap)
-  }
-
-  function Draw-Rule($graphics, [single]$top, [single]$x1, [single]$x2) {
-    $graphics.DrawLine([System.Drawing.Pens]::Black, $x1, $top, $x2, $top)
-    return [single]($top + 9)
-  }
-
-  function Draw-Row($graphics, [string]$leftText, [string]$rightText,
-                    $font, [single]$top, [single]$xLeft, [single]$xRight,
-                    $rightFmt) {
-    $graphics.DrawString($leftText, $font, $black, $xLeft, $top)
-    $graphics.DrawString($rightText, $font, $black,
-      [single]$xRight, $top, $rightFmt)
-    return [single]($top + 15)
+  function Draw-WrappedText($text, $font, [single]$x, [single]$top,
+                            [single]$maxWidth, $format, [single]$gap = 2) {
+    if ([string]::IsNullOrWhiteSpace([string]$text)) { return $top }
+    $layout = New-Object System.Drawing.RectangleF($x, $top, $maxWidth, 1000)
+    $measure = $g.MeasureString([string]$text, $font, $maxWidth, $format)
+    $g.DrawString([string]$text, $font, $black, $layout, $format)
+    return [single]($top + [Math]::Max(12, [Math]::Ceiling($measure.Height)) + $gap)
   }
 
   if ($script:r.kind -eq 'text') {
-    $ticketFont = New-Object System.Drawing.Font('Arial', 8)
-    $ticketBold = New-Object System.Drawing.Font(
-      'Arial', 8, [System.Drawing.FontStyle]::Bold
-    )
-    $ticketHeader = New-Object System.Drawing.Font(
-      'Arial', 11, [System.Drawing.FontStyle]::Bold
-    )
+
+    $font = New-Object System.Drawing.Font('Arial',8)
 
     foreach ($line in $script:r.lines) {
-      $value = [string]$line
-      if ([string]::IsNullOrWhiteSpace($value)) {
-        $y += 8
-        continue
-      }
-
-      if ($value -eq 'KOC' -or $value -eq 'Prepare Order') {
-        $y = Draw-WrappedText $g $value $ticketHeader $left $y $contentWidth $centerFormat 3
-      } elseif ($value -eq 'Kitchen Order Copy' -or
-                $value -eq 'Updated Kitchen Order Copy' -or
-                $value -eq 'ITEMS' -or
-                $value -match '^-{5,}$') {
-        $y = Draw-WrappedText $g $value $ticketBold $left $y $contentWidth $centerFormat 2
-      } else {
-        $y = Draw-WrappedText $g $value $ticketFont $left $y $contentWidth $leftFormat 2
-      }
+      $y = Draw-WrappedText ([string]$line) $font $left $y 212 $null 2
     }
 
-    $ticketFont.Dispose()
-    $ticketBold.Dispose()
-    $ticketHeader.Dispose()
+    $font.Dispose()
+
   } else {
+
+    # --------------------------------
+    # FONTS
+    # --------------------------------
+
     $brand = New-Object System.Drawing.Font(
-      'Arial', 16, [System.Drawing.FontStyle]::Bold
+      'Arial',16,[System.Drawing.FontStyle]::Bold
     )
+
     $head = New-Object System.Drawing.Font(
-      'Arial', 8, [System.Drawing.FontStyle]::Bold
+      'Arial',8,[System.Drawing.FontStyle]::Bold
     )
-    $normal = New-Object System.Drawing.Font('Arial', 7)
-    $small = New-Object System.Drawing.Font('Arial', 6)
+
+    $normal = New-Object System.Drawing.Font('Arial',7)
+
+    $small = New-Object System.Drawing.Font('Arial',6)
+
     $bold = New-Object System.Drawing.Font(
-      'Arial', 8, [System.Drawing.FontStyle]::Bold
-    )
-    $totalFont = New-Object System.Drawing.Font(
-      'Arial', 10, [System.Drawing.FontStyle]::Bold
+      'Arial',8,[System.Drawing.FontStyle]::Bold
     )
 
-    # BUSINESS HEADER — centered and wrapped to the actual 58mm print width.
-    $y = Draw-WrappedText $g ([string]$script:r.restaurant) $brand $left $y $contentWidth $centerFormat 1
-    $y = Draw-WrappedText $g ([string]$script:r.city) $head $left $y $contentWidth $centerFormat 1
-    $y = Draw-WrappedText $g ([string]$script:r.address1) $normal $left $y $contentWidth $centerFormat 1
-    $y = Draw-WrappedText $g ([string]$script:r.address2) $normal $left $y $contentWidth $centerFormat 1
-    $y = Draw-WrappedText $g ([string]$script:r.email) $normal $left $y $contentWidth $centerFormat 1
-    $y = Draw-WrappedText $g ([string]$script:r.phone1) $normal $left $y $contentWidth $centerFormat 1
-    $y = Draw-WrappedText $g ([string]$script:r.phone2) $normal $left $y $contentWidth $centerFormat 5
-    $y = Draw-Rule $g $y $left $right
+    # --------------------------------
+    # BUSINESS HEADER
+    # --------------------------------
 
+    $g.DrawString(
+      [string]$script:r.restaurant,
+      $brand,
+      $black,
+      [single]114,
+      [single]$y,
+      $center
+    )
+
+    $y += 24
+
+    $g.DrawString(
+      [string]$script:r.city,
+      $head,
+      $black,
+      [single]114,
+      [single]$y,
+      $center
+    )
+
+    $y += 16
+
+    $g.DrawString(
+      [string]$script:r.address1,
+      $normal,
+      $black,
+      [single]114,
+      [single]$y,
+      $center
+    )
+
+    $y += 14
+
+    $g.DrawString(
+      [string]$script:r.address2,
+      $normal,
+      $black,
+      [single]114,
+      [single]$y,
+      $center
+    )
+
+    $y += 16
+
+    $g.DrawString(
+      [string]$script:r.email,
+      $normal,
+      $black,
+      [single]114,
+      [single]$y,
+      $center
+    )
+
+    $y += 14
+
+    $g.DrawString(
+      [string]$script:r.phone1,
+      $normal,
+      $black,
+      [single]114,
+      [single]$y,
+      $center
+    )
+
+    $y += 14
+
+    $g.DrawString(
+      [string]$script:r.phone2,
+      $normal,
+      $black,
+      [single]114,
+      [single]$y,
+      $center
+    )
+
+    $y += 18
+
+    $g.DrawLine(
+      [System.Drawing.Pens]::Black,
+      $left,$y,$right,$y
+    )
+
+    $y += 8
+
+    # --------------------------------
     # BILL DETAILS
-    $y = Draw-WrappedText $g 'BILL / RECEIPT' $head $left $y $contentWidth $centerFormat 3
-    $y = Draw-WrappedText $g ('Bill: ' + [string]$script:r.billNo) $normal $left $y $contentWidth $leftFormat 1
-    $y = Draw-Row $g ('Date: ' + [string]$script:r.date) ('Time: ' + [string]$script:r.time) $normal $y $left $right $rightFormat
-    $y = Draw-WrappedText $g ('Customer: ' + [string]$script:r.customer) $normal $left $y $contentWidth $leftFormat 1
+    # --------------------------------
+
+    $g.DrawString(
+      'BILL / RECEIPT',
+      $head,
+      $black,
+      [single]114,
+      [single]$y,
+      $center
+    )
+
+    $y += 17
+
+    $g.DrawString(
+      ('Bill: ' + [string]$script:r.billNo),
+      $normal,
+      $black,
+      $left,
+      $y
+    )
+
+    $y += 14
+
+    $g.DrawString(
+      ('Date: ' + [string]$script:r.date),
+      $normal,
+      $black,
+      $left,
+      $y
+    )
+
+    $g.DrawString(
+      ('Time: ' + [string]$script:r.time),
+      $normal,
+      $black,
+      [single]$right,
+      [single]$y,
+      $rf
+    )
+
+    $y += 15
+
+    $y = Draw-WrappedText ('Customer: ' + [string]$script:r.customer) $normal $left $y 212 $null 2
 
     if ([string]$script:r.phone) {
-      $y = Draw-WrappedText $g ('Phone: ' + [string]$script:r.phone) $normal $left $y $contentWidth $leftFormat 1
-    }
-    if ([string]$script:r.table) {
-      $y = Draw-WrappedText $g ('Table: ' + [string]$script:r.table) $normal $left $y $contentWidth $leftFormat 4
-    }
-    $y = Draw-Rule $g $y $left $right
 
-    # ITEMS — names wrap; quantity/price and amount stay on separate aligned columns.
-    $y = Draw-Row $g 'ITEM' 'AMOUNT' $head $y $left $right $rightFormat
+      $g.DrawString(
+        ('Phone: ' + [string]$script:r.phone),
+        $normal,
+        $black,
+        $left,
+        $y
+      )
+
+      $y += 14
+    }
+
+    $g.DrawString(
+      ('Table: ' + [string]$script:r.table),
+      $normal,
+      $black,
+      $left,
+      $y
+    )
+
+    $y += 17
+
+    $g.DrawLine(
+      [System.Drawing.Pens]::Black,
+      $left,$y,$right,$y
+    )
+
+    $y += 7
+
+    # --------------------------------
+    # ITEM HEADER
+    # --------------------------------
+
+    $g.DrawString(
+      'ITEM',
+      $head,
+      $black,
+      $left,
+      $y
+    )
+
+    $g.DrawString(
+      'AMOUNT',
+      $head,
+      $black,
+      [single]$right,
+      [single]$y,
+      $rf
+    )
+
+    $y += 16
+
+    # --------------------------------
+    # ITEMS
+    # --------------------------------
+
     foreach ($item in $script:r.items) {
-      $y = Draw-WrappedText $g ([string]$item.name) $bold $left $y $contentWidth $leftFormat 0
-      $detail = ([string]$item.qty + ' x Rs. ' +
-        ([double]$item.price).ToString('0.00'))
-      $amount = 'Rs. ' + ([double]$item.total).ToString('0.00')
-      $y = Draw-Row $g $detail $amount $normal $y ($left + 4) $right $rightFormat
-      $y += 2
+
+      $y = Draw-WrappedText ([string]$item.name) $bold $left $y 212 $null 1
+
+      $g.DrawString(
+        (
+          [string]$item.qty +
+          ' x Rs.' +
+          ([double]$item.price).ToString('0.00')
+        ),
+        $small,
+        $black,
+        $left + 5,
+        $y
+      )
+
+      $g.DrawString(
+        (
+          'Rs.' +
+          ([double]$item.total).ToString('0.00')
+        ),
+        $normal,
+        $black,
+        [single]$right,
+        [single]$y,
+        $rf
+      )
+
+      $y += 17
     }
-    $y = Draw-Rule $g $y $left $right
 
-    # TOTAL
-    $y = Draw-Row $g 'TOTAL' ('Rs. ' + ([double]$script:r.total).ToString('0.00')) $totalFont $y $left $right $rightFormat
-    $y = Draw-Rule $g $y $left $right
+    $g.DrawLine(
+      [System.Drawing.Pens]::Black,
+      $left,$y,$right,$y
+    )
 
-    # FOOTER COMES BEFORE THE QR, matching the proven Android receipt sequence.
-    $y = Draw-WrappedText $g ([string]$script:r.footer) $head $left $y $contentWidth $centerFormat 2
-    $y = Draw-WrappedText $g 'Powered by Club Deal' $small $left $y $contentWidth $centerFormat 5
-    $y = Draw-Rule $g $y $left $right
+    $y += 8
 
-    # UPI QR IS THE LAST MAIN CONTENT. Keep a full four-module quiet zone.
+    # --------------------------------
+    # TOTALS
+    # --------------------------------
+
+    $g.DrawString(
+      'Subtotal',
+      $normal,
+      $black,
+      $left,
+      $y
+    )
+
+    $g.DrawString(
+      (
+        'Rs.' +
+        ([double]$script:r.subtotal).ToString('0.00')
+      ),
+      $normal,
+      $black,
+      [single]$right,
+      [single]$y,
+      $rf
+    )
+
+    $y += 15
+
+    if ([double]$script:r.discount -gt 0) {
+
+      $g.DrawString(
+        'Discount',
+        $normal,
+        $black,
+        $left,
+        $y
+      )
+
+      $g.DrawString(
+        (
+          '- Rs.' +
+          ([double]$script:r.discount).ToString('0.00')
+        ),
+        $normal,
+        $black,
+        [single]$right,
+        [single]$y,
+        $rf
+      )
+
+      $y += 15
+    }
+
+    $g.DrawString(
+      'GRAND TOTAL',
+      $head,
+      $black,
+      $left,
+      $y
+    )
+
+    $g.DrawString(
+      (
+        'Rs.' +
+        ([double]$script:r.total).ToString('0.00')
+      ),
+      $bold,
+      $black,
+      [single]$right,
+      [single]$y,
+      $rf
+    )
+
+    $y += 20
+
+    # --------------------------------
+    # PAYMENT STATUS
+    # --------------------------------
+
+    $g.DrawString(
+      (
+        [string]$script:r.status +
+        ' / ' +
+        [string]$script:r.payment
+      ),
+      $head,
+      $black,
+      [single]114,
+      [single]$y,
+      $center
+    )
+
+    $y += 18
+
+    if ([string]$script:r.note) {
+
+      $g.DrawString(
+        ('Note: ' + [string]$script:r.note),
+        $small,
+        $black,
+        $left,
+        $y
+      )
+
+      $y += 15
+    }
+
+    # Footer before QR, matching Android receipt order.
+    $g.DrawLine([System.Drawing.Pens]::Black, $left,$y,$right,$y)
+    $y += 7
+    $g.DrawString([string]$script:r.footer, $head, $black, [single]114, [single]$y, $center)
+    $y += 16
+    $g.DrawString('Powered by Club Deal', $small, $black, [single]114, [single]$y, $center)
+    $y += 22
+
+    # --------------------------------
+    # UPI QR CODE — last main content
+    # --------------------------------
+
     if ($script:r.qr) {
-      $y = Draw-WrappedText $g 'SCAN TO PAY' $head $left $y $contentWidth $centerFormat 2
-      $y = Draw-WrappedText $g ('Amount: Rs. ' + [string]$script:r.upiAmount) $bold $left $y $contentWidth $centerFormat 1
-      $y = Draw-WrappedText $g ([string]$script:r.vpa) $small $left $y $contentWidth $centerFormat 3
 
+      $g.DrawLine(
+        [System.Drawing.Pens]::Black,
+        $left,$y,$right,$y
+      )
+
+      $y += 8
+
+      $g.DrawString(
+        'SCAN TO PAY',
+        $head,
+        $black,
+        [single]114,
+        [single]$y,
+        $center
+      )
+
+      $y += 16
+
+      $g.DrawString(
+        ('Amount: Rs.' + [string]$script:r.upiAmount),
+        $bold,
+        $black,
+        [single]114,
+        [single]$y,
+        $center
+      )
+
+      $y += 10
+      $g.DrawString([string]$script:r.vpa, $small, $black, [single]114, [single]$y, $center)
+      $y += 13
+
+      # QR MATRIX
       $matrix = @($script:r.qr)
+
       $count = $matrix.Count
-      if ($count -gt 0) {
-        # Aim for a large QR while keeping its four-module white border inside 58mm.
-        $module = [Math]::Max(2, [Math]::Min(4, [Math]::Floor(168 / $count)))
-        $qrSize = $count * $module
-        $quiet = 4 * $module
-        $totalQrSize = $qrSize + (2 * $quiet)
-        $qx = [single](($width - $totalQrSize) / 2)
-        $qrTop = [single]$y
 
-        $g.FillRectangle(
-          [System.Drawing.Brushes]::White,
-          $qx, $qrTop, [single]$totalQrSize, [single]$totalQrSize
-        )
+      # QR size
+      $module = [Math]::Max(2, [Math]::Min(4, [Math]::Floor(168 / $count)))
+      $size = $count * $module
+      $quiet = 4 * $module
+      $totalQrSize = $size + (2 * $quiet)
+      $qx = [single](($width - $totalQrSize) / 2)
 
-        for ($row = 0; $row -lt $count; $row++) {
-          $bits = @($matrix[$row])
-          for ($col = 0; $col -lt $count; $col++) {
-            if ($bits[$col] -eq $true) {
-              $g.FillRectangle(
-                $black,
-                [single]($qx + $quiet + ($col * $module)),
-                [single]($qrTop + $quiet + ($row * $module)),
-                [single]$module,
-                [single]$module
-              )
-            }
+      # White QR background
+      $g.FillRectangle(
+        [System.Drawing.Brushes]::White,
+        $qx,
+        [single]$y,
+        [single]$totalQrSize,
+        [single]$totalQrSize
+      )
+
+      # Draw QR pixels
+      for ($row = 0; $row -lt $count; $row++) {
+
+        $bits = @($matrix[$row])
+
+        for ($col = 0; $col -lt $count; $col++) {
+
+          if ($bits[$col] -eq $true) {
+
+            $g.FillRectangle(
+              $black,
+              [single]($qx + $quiet + $col * $module),
+              [single]($y + $quiet + $row * $module),
+              [single]$module,
+              [single]$module
+            )
           }
         }
-
-        $y += $totalQrSize + 8
       }
+
+      $y += $totalQrSize + 8
+
     } else {
-      $y = Draw-WrappedText $g 'UPI QR NOT AVAILABLE' $small $left $y $contentWidth $centerFormat 2
+
+      $g.DrawLine(
+        [System.Drawing.Pens]::Black,
+        $left,$y,$right,$y
+      )
+
+      $y += 8
+
+      $g.DrawString(
+        'UPI QR NOT AVAILABLE',
+        $small,
+        $black,
+        [single]114,
+        [single]$y,
+        $center
+      )
+
+      $y += 16
     }
 
-    # A short final feed after QR; no cut command is sent to small printers.
-    $y += 22
+
 
     $brand.Dispose()
     $head.Dispose()
     $normal.Dispose()
     $small.Dispose()
     $bold.Dispose()
-    $totalFont.Dispose()
   }
 
-  $leftFormat.Dispose()
-  $centerFormat.Dispose()
-  $rightFormat.Dispose()
+  $center.Dispose()
+  $rf.Dispose()
+
   $e.HasMorePages = $false
 })
 
 $doc.Print()
+
 $doc.Dispose()
+
 Write-Output 'PRINT_SUBMITTED'
 '''
             .replaceAll('__PRINTER__', encodedPrinter)
@@ -767,7 +1065,6 @@ Write-Output 'PRINT_SUBMITTED'
 ).hasMatch(value)) {
         return null;
       }
-
       return value;
     } catch (_) {
       return null;
