@@ -130,13 +130,19 @@ class _AllOrdersPageState extends State<AllOrdersPage> {
                               decoration: const InputDecoration(
                                 labelText: 'Table',
                               ),
-                              items: List.generate(5, (i) {
-                                final value = 'A${i + 1}';
-                                return DropdownMenuItem(
-                                  value: value,
-                                  child: Text(value),
-                                );
-                              }),
+                              items: [
+                                ...List.generate(5, (i) {
+                                  final value = 'A${i + 1}';
+                                  return DropdownMenuItem(
+                                    value: value,
+                                    child: Text(value),
+                                  );
+                                }),
+                                const DropdownMenuItem<String>(
+                                  value: 'Parcel',
+                                  child: Text('Parcel'),
+                                ),
+                              ],
                               onChanged: (value) {
                                 if (value != null) tableController.text = value;
                               },
