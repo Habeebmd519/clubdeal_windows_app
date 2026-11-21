@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/bloc/settings_bloc.dart';
 import '../../core/services/printer_service.dart';
+import '../../core/services/customer_display_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/desktop_widgets.dart';
 
@@ -233,6 +234,197 @@ class SettingsPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 14),
+            const SizedBox(height: 14),
+            _Section(
+              title: 'Customer Display — VFD / Serial',
+              child: AnimatedBuilder(
+                animation: context.read<CustomerDisplayService>(),
+                builder: (context, _) {
+                  final display = context.read<CustomerDisplayService>();
+                  final availablePorts = <String>{
+                    ...display.ports,
+                    display.selectedPort,
+                    'COM1',
+                    'COM2',
+                  }.toList()..sort((a, b) {
+                    final na = int.tryParse(a.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+                    final nb = int.tryParse(b.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+                    return na.compareTo(nb);
+                  });
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Optional serial 2-line customer display. This is separate from the POS58 receipt printer.',
+                        style: TextStyle(color: AppColors.cream2, fontSize: 12),
+                      ),
+                      const SizedBox(height: 8),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Enable VFD customer display'),
+                        subtitle: const Text(
+                          'When an order is opened, send its last item and total. Payment confirmation sends the paid total.',
+                        ),
+                        value: display.enabled,
+                        onChanged: display.setEnabled,
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              value: availablePorts.contains(display.selectedPort)
+                                  ? display.selectedPort
+                                  : availablePorts.first,
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Serial port',
+                                prefixIcon: Icon(Icons.settings_input_component),
+                              ),
+                              items: availablePorts.map((port) => DropdownMenuItem(
+                                value: port,
+                                child: Text(port),
+                              )).toList(),
+                              onChanged: display.busy
+                                  ? null
+                                  : (value) {
+                                      if (value != null) display.configure(port: value);
+                                    },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          OutlinedButton.icon(
+                            onPressed: display.busy ? null : display.refreshPorts,
+                            icon: const Icon(Icons.refresh, size: 17),
+                            label: const Text('Scan'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<int>(
+                              value: display.baudRate,
+                              decoration: const InputDecoration(labelText: 'Baud rate'),
+                              items: const [2400, 4800, 9600, 19200]
+                                  .map((rate) => DropdownMenuItem(
+                                        value: rate,
+                                        child: Text('$rate bps'),
+                                      ))
+                                  .toList(),
+                              onChanged: display.busy
+                                  ? null
+                                  : (value) {
+                                      if (value != null) display.configure(baud: value);
+                                    },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: DropdownButtonFormField<CustomerDisplayProtocol>(
+                              value: display.protocol,
+                              decoration: const InputDecoration(labelText: 'VFD command set'),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: CustomerDisplayProtocol.cd5220,
+                                  child: Text('CD5220'),
+                                ),
+                                DropdownMenuItem(
+                                  value: CustomerDisplayProtocol.escPos,
+                                  child: Text('ESC/POS'),
+                                ),
+                              ],
+                              onChanged: display.busy
+                                  ? null
+                                  : (value) {
+                                      if (value != null) display.configure(selectedProtocol: value);
+                                    },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: display.busy
+                                ? null
+                                : () async {
+                                    try {
+                                      await display.testConnection();
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('COM port opened and closed. No display data was sent.')),
+                                      );
+                                    } catch (e) {
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Port test failed: $e')),
+                                      );
+                                    }
+                                  },
+                            icon: const Icon(Icons.cable, size: 17),
+                            label: const Text('Test COM Port'),
+                          ),
+                          FilledButton.icon(
+                            onPressed: display.busy
+                                ? null
+                                : () async {
+                                    try {
+                                      await display.testDisplay();
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('VFD test data sent. Check the customer display.')),
+                                      );
+                                    } catch (e) {
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Display test failed: $e')),
+                                      );
+                                    }
+                                  },
+                            icon: const Icon(Icons.display_settings, size: 17),
+                            label: const Text('Send VFD Test'),
+                          ),
+                          StatusPill(
+                            text: display.busy ? 'WORKING' : display.status.toUpperCase(),
+                            color: display.lastError == null
+                                ? AppColors.success
+                                : AppColors.warning,
+                          ),
+                        ],
+                      ),
+                      if (display.lastError != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          display.lastError!,
+                          style: const TextStyle(color: AppColors.warning, fontSize: 11),
+                        ),
+                      ],
+                      const Divider(color: AppColors.border, height: 24),
+                      const Text(
+                        'Important hardware note',
+                        style: TextStyle(color: AppColors.cream, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 5),
+                      const Text(
+                        'Your Intel J1900 hardware is similar to the ZKTeco ZK1515 family. ZKTeco lists an 8-character LED digital-tube display as standard and a 2-line VFD as an optional customer display. This section currently sends documented serial commands to 2-line VFDs only. The built-in 8-character LED uses a separate controller protocol that is not identified by the public specifications, so the app deliberately does not send guessed commands to it.',
+                        style: TextStyle(color: AppColors.cream2, fontSize: 11, height: 1.45),
+                      ),
+                      const SizedBox(height: 5),
+                      const Text(
+                        'For the built-in numeric LED, first use Test COM Port on COM1 and COM2. A successful port open only confirms Windows can open that port; it does not prove that the internal display is wired to it.',
+                        style: TextStyle(color: AppColors.muted, fontSize: 11, height: 1.45),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
             const _Section(
               title: 'Desktop Performance',
               child: Text(
