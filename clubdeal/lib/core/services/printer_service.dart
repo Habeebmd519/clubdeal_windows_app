@@ -516,7 +516,7 @@ $doc.add_PrintPage({
     foreach ($line in $script:r.lines) {
       $lineText = [string]$line
       $lineLayout = New-Object System.Drawing.RectangleF($left, $y, $contentWidth, 1000)
-      $lineMeasure = $g.MeasureString($lineText, $font, 212)
+      $lineMeasure = $g.MeasureString($lineText, $font, $contentWidth)
       $g.DrawString($lineText, $font, $black, $lineLayout)
       $y += [Math]::Max(15, [Math]::Ceiling($lineMeasure.Height) + 2)
     }
