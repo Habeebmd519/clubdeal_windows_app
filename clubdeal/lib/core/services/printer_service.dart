@@ -1038,36 +1038,66 @@ Write-Output 'PRINT_SUBMITTED'
   // --------------------------------------------------
 
   Future<ProcessResult> _runPowerShell(String script) async {
-    final units = script.codeUnits;
+    // Order receipts can contain a large QR payload. Passing the complete
+    // script through -EncodedCommand can exceed Windows' process command-line
+    // length limit (32,767 characters). Write it to a short temporary .ps1
+    // file instead, and pass only that file path to powershell.exe.
+    final tempDir = await Directory.systemTemp.createTemp('clubdeal_ps_');
+    final scriptFile = File(
+      '${tempDir.path}${Platform.pathSeparator}print.ps1',
+    );
 
-    final bytes = Uint8List(units.length * 2);
+    try {
+      final units = script.codeUnits;
+      final bytes = Uint8List(2 + units.length * 2);
+      // UTF-16 little-endian BOM so Windows PowerShell 5.1 reads the script
+      // correctly, including any non-ASCII receipt text.
+      bytes[0] = 0xff;
+      bytes[1] = 0xfe;
 
-    for (var i = 0; i < units.length; i++) {
-      bytes[i * 2] = units[i] & 0xff;
+      for (var i = 0; i < units.length; i++) {
+        bytes[2 + i * 2] = units[i] & 0xff;
+        bytes[3 + i * 2] = (units[i] >> 8) & 0xff;
+      }
 
-      bytes[i * 2 + 1] = (units[i] >> 8) & 0xff;
-    }
+      await scriptFile.writeAsBytes(bytes, flush: true);
 
-    final result = await Process.run('powershell.exe', [
-      '-NoProfile',
-      '-NonInteractive',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-EncodedCommand',
-      base64Encode(bytes),
-    ], runInShell: false);
+      final args = [
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        scriptFile.path,
+      ];
 
-    if (result.exitCode != 0) {
-      throw ProcessException(
+      final result = await Process.run(
         'powershell.exe',
-        const [],
-        result.stderr.toString().trim().isEmpty
-            ? result.stdout.toString().trim()
-            : result.stderr.toString().trim(),
-        result.exitCode,
+        args,
+        runInShell: false,
       );
-    }
 
-    return result;
+      if (result.exitCode != 0) {
+        throw ProcessException(
+          'powershell.exe',
+          args,
+          result.stderr.toString().trim().isEmpty
+              ? result.stdout.toString().trim()
+              : result.stderr.toString().trim(),
+          result.exitCode,
+        );
+      }
+
+      return result;
+    } finally {
+      // Clean up the temporary script whether printing succeeds or fails.
+      try {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      } catch (_) {
+        // Do not mask the original printing result with a cleanup error.
+      }
+    }
   }
 }
