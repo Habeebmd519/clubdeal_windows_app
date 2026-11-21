@@ -18,16 +18,16 @@ The ZKPOS Restaurant manual's Pole Display section configures a COM port and sel
 
 - Isolated serial customer-display service, separate from the receipt printer.
 - COM-port discovery and a safe open/close port check that sends no bytes.
-- Configurable baud rate and VFD command set (ESC/POS or CD5220).
-- VFD test message.
-- When an existing saved order is expanded in the desktop Orders page, send the last item and order total to an enabled 2x20 VFD.
-- After payment is saved, send a payment/total message.
+- Configurable baud rate and display mode: built-in 8-character numeric LED (raw ASCII compatibility probe), ESC/POS VFD, or CD5220 VFD.
+- Display test: numeric LED mode sends `12345678`; VFD modes send a 2-line text test.
+- After a customer receipt is successfully queued, send the exact order total to the enabled display. For numeric LED mode, send an 8-character right-aligned amount; for VFD modes, show a text total.
+- Selecting/expanding a saved order also shows its total on numeric LED mode or the last item plus total on a 2x20 VFD.
 - Preferences are stored separately and display support is disabled by default.
 - The root source mirror and active `clubdeal/` source tree are kept synchronized.
 
 ## Known limitations — intentionally not guessed
 
-The built-in 8-character LED digital-tube controller protocol is not identified by the public ZK1515 product specification or the ZKPOS Pole Display setup instructions. This branch does not send VFD commands to that numeric LED module and does not claim that COM1 or COM2 is connected to it. The COM-port check only confirms Windows can open a port; it does not prove the display is wired to it.
+The built-in 8-character LED digital-tube controller protocol is not identified by the public ZK1515 product specification or the ZKPOS Pole Display setup instructions. The new built-in LED mode therefore sends only a minimal raw ASCII numeric payload (eight characters) as a compatibility probe; this is not a ZKTeco-verified protocol and must be physically tested on the terminal. The COM-port check only confirms Windows can open a port; it does not prove the display is wired to it. CD5220 and ESC/POS commands are for compatible 2-line VFDs, not the built-in numeric LED.
 
 The desktop app currently receives persisted orders from Firestore and has no local in-progress checkout cart. Therefore the current integration updates a VFD when a cashier expands/selects an order, and after payment; it cannot yet mirror each tap in a live cart that this app does not currently implement.
 
@@ -36,5 +36,7 @@ The desktop app currently receives persisted orders from Firestore and has no lo
 - ZKTeco ZK1515 Series: https://zktecopos.com/zk1515_series
 - ZKTeco ZK15 Series: https://zktecopos.com/zk15_series
 - ZKTeco ZK-VFD accessory: https://zktecopos.com/vfd
+- ZKTeco ZKPOS FAQ: Customer Display setup selects COM port and LED or VFD: https://zktecopos.com/zkpos_faq
+- ZKTeco Supermarket Back Office manual: Enable LED Display shows product price and total bill amount: https://forum.zktecopos.com/wp-content/uploads/2022/09/ZKPos-Supermarket-Back-Office-User-Manual4.5.5.pdf
 - ZKPOS Restaurant manual, Pole Display section: https://forum.zktecopos.com/wp-content/uploads/2022/10/ZKPOS-Restaurant-User-Manual-5.0.0.pdf
 - CD5220 Customer Display manual: https://cdn.barcodesinc.com/resources/CD5220_Manual.pdf
