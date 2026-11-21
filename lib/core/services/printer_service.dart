@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 import 'package:qr/qr.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -219,18 +220,25 @@ try {
     RestaurantOrder order, {
     bool revised = false,
   }) async {
+    final date = order.createdAt?.toLocal() ?? DateTime.now();
     final lines = <String>[
-      'CLUB DEAL - KITCHEN',
-      revised ? 'UPDATED KITCHEN TICKET' : 'KITCHEN ORDER TICKET',
-      '------------------------------',
-      'Order: ${order.id}',
-      'Table / Token: ${order.table}',
-      'Customer: ${order.customerName}',
-      if (order.createdAt != null) 'Time: ${order.createdAt!.toLocal()}',
-      '------------------------------',
-      ...order.items.map((i) => '${i.qty} x ${i.name}'),
-      if (order.note.trim().isNotEmpty) 'NOTE: ${order.note}',
-      '------------------------------',
+      'KOC',
+      revised ? 'Updated Kitchen Order Copy' : 'Kitchen Order Copy',
+      '--------------------------------',
+      'Bill ID : ${order.id}',
+      'Table   : ${order.table.toUpperCase()}',
+      'Name    : ${order.customerName}',
+      'Time    : ${DateFormat('hh:mm a').format(date)}',
+      '--------------------------------',
+      'ITEMS',
+      '--------------------------------',
+      ...order.items.map((item) => '${item.qty} x ${item.name}'),
+      if (order.note.trim().isNotEmpty) ...[
+        '--------------------------------',
+        'Note: ${order.note.trim()}',
+      ],
+      '--------------------------------',
+      'Prepare Order',
       '',
       '',
     ];
@@ -284,10 +292,10 @@ try {
         host: 'pay',
         queryParameters: {
           'pa': vpa,
-          'pn': 'Club Deal',
+          'pn': 'CLUBDEAL',
           'am': order.total.toStringAsFixed(2),
           'cu': 'INR',
-          'tn': 'Club Deal order ${order.id}',
+          'tn': 'Bill',
           'tr': order.id,
         },
       ).toString();
@@ -324,14 +332,9 @@ try {
       // BILL DETAILS
       'billNo': order.id,
 
-      'date':
-          '${date.day.toString().padLeft(2, '0')}/'
-          '${date.month.toString().padLeft(2, '0')}/'
-          '${date.year}',
+      'date': DateFormat('dd MMM yyyy').format(date),
 
-      'time':
-          '${date.hour.toString().padLeft(2, '0')}:'
-          '${date.minute.toString().padLeft(2, '0')}',
+      'time': DateFormat('hh:mm a').format(date),
 
       'customer': order.customerName,
       'phone': order.phone,
@@ -377,18 +380,19 @@ try {
 
   Future<String?> _loadPaymentVpa() async {
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('app_config')
-          .doc('paymentBankId')
-          .get();
+      final db = FirebaseFirestore.instance;
+      var doc = await db.collection('app_config').doc('paymentBankId').get();
+      var value = doc.data()?['bankId']?.toString().trim();
 
-      final value = doc.data()?['bankId']?.toString().trim();
+      if (value == null || value.isEmpty) {
+        doc = await db.collection('app_confige').doc('paymentBankId').get();
+        value = doc.data()?['bankId']?.toString().trim();
+      }
 
       if (value == null ||
           !RegExp(r'^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+$').hasMatch(value)) {
         return null;
       }
-
       return value;
     } catch (_) {
       return null;
@@ -484,9 +488,17 @@ $doc.add_PrintPage({
 
   $g.PageUnit = [System.Drawing.GraphicsUnit]::Display
 
-  $width = 228
-  $left = 8
-  $right = 220
+  # Use the printer driver's real printable width, capped to a safe
+  # 58mm receipt column. POS-58 drivers often expose less than the nominal
+  # roll width; drawing to x=220 clips right-aligned prices and totals.
+  $clip = $g.VisibleClipBounds
+  $pageLeft = [Math]::Ceiling($clip.Left)
+  $width = [Math]::Min(190, [Math]::Floor($clip.Width))
+  if ($width -lt 120) { $width = 190 }
+  $left = $pageLeft + 3
+  $right = $pageLeft + $width - 3
+  $centerX = ($left + $right) / 2
+  $contentWidth = $right - $left
   $y = 8
 
   $center = New-Object System.Drawing.StringFormat
@@ -502,15 +514,11 @@ $doc.add_PrintPage({
     $font = New-Object System.Drawing.Font('Arial',8)
 
     foreach ($line in $script:r.lines) {
-      $g.DrawString(
-        [string]$line,
-        $font,
-        $black,
-        $left,
-        $y
-      )
-
-      $y += 15
+      $lineText = [string]$line
+      $lineLayout = New-Object System.Drawing.RectangleF($left, $y, $contentWidth, 1000)
+      $lineMeasure = $g.MeasureString($lineText, $font, $contentWidth)
+      $g.DrawString($lineText, $font, $black, $lineLayout)
+      $y += [Math]::Max(15, [Math]::Ceiling($lineMeasure.Height) + 2)
     }
 
     $font.Dispose()
@@ -545,7 +553,7 @@ $doc.add_PrintPage({
       [string]$script:r.restaurant,
       $brand,
       $black,
-      [single]114,
+      [single]$centerX,
       [single]$y,
       $center
     )
@@ -556,7 +564,7 @@ $doc.add_PrintPage({
       [string]$script:r.city,
       $head,
       $black,
-      [single]114,
+      [single]$centerX,
       [single]$y,
       $center
     )
@@ -567,7 +575,7 @@ $doc.add_PrintPage({
       [string]$script:r.address1,
       $normal,
       $black,
-      [single]114,
+      [single]$centerX,
       [single]$y,
       $center
     )
@@ -578,7 +586,7 @@ $doc.add_PrintPage({
       [string]$script:r.address2,
       $normal,
       $black,
-      [single]114,
+      [single]$centerX,
       [single]$y,
       $center
     )
@@ -589,7 +597,7 @@ $doc.add_PrintPage({
       [string]$script:r.email,
       $normal,
       $black,
-      [single]114,
+      [single]$centerX,
       [single]$y,
       $center
     )
@@ -600,7 +608,7 @@ $doc.add_PrintPage({
       [string]$script:r.phone1,
       $normal,
       $black,
-      [single]114,
+      [single]$centerX,
       [single]$y,
       $center
     )
@@ -611,7 +619,7 @@ $doc.add_PrintPage({
       [string]$script:r.phone2,
       $normal,
       $black,
-      [single]114,
+      [single]$centerX,
       [single]$y,
       $center
     )
@@ -633,7 +641,7 @@ $doc.add_PrintPage({
       'BILL / RECEIPT',
       $head,
       $black,
-      [single]114,
+      [single]$centerX,
       [single]$y,
       $center
     )
@@ -657,27 +665,23 @@ $doc.add_PrintPage({
       $left,
       $y
     )
+    $y += 14
 
     $g.DrawString(
       ('Time: ' + [string]$script:r.time),
-      $normal,
-      $black,
-      [single]$right,
-      [single]$y,
-      $rf
-    )
-
-    $y += 15
-
-    $g.DrawString(
-      ('Customer: ' + [string]$script:r.customer),
       $normal,
       $black,
       $left,
       $y
     )
 
-    $y += 14
+    $y += 15
+
+    $customerText = 'Customer: ' + [string]$script:r.customer
+    $customerLayout = New-Object System.Drawing.RectangleF($left, $y, $contentWidth, 1000)
+    $customerMeasure = $g.MeasureString($customerText, $normal, $contentWidth)
+    $g.DrawString($customerText, $normal, $black, $customerLayout)
+    $y += [Math]::Max(14, [Math]::Ceiling($customerMeasure.Height) + 2)
 
     if ([string]$script:r.phone) {
 
@@ -738,21 +742,17 @@ $doc.add_PrintPage({
 
     foreach ($item in $script:r.items) {
 
-      $g.DrawString(
-        [string]$item.name,
-        $bold,
-        $black,
-        $left,
-        $y
-      )
-
-      $y += 13
+      $itemName = [string]$item.name
+      $itemLayout = New-Object System.Drawing.RectangleF($left, $y, $contentWidth, 1000)
+      $itemMeasure = $g.MeasureString($itemName, $bold, $contentWidth)
+      $g.DrawString($itemName, $bold, $black, $itemLayout)
+      $y += [Math]::Max(13, [Math]::Ceiling($itemMeasure.Height) + 1)
 
       $g.DrawString(
         (
           [string]$item.qty +
           ' x Rs.' +
-          ([double]$item.price).ToString('0.00')
+          ([double]$item.price).ToString('0.##')
         ),
         $small,
         $black,
@@ -763,7 +763,7 @@ $doc.add_PrintPage({
       $g.DrawString(
         (
           'Rs.' +
-          ([double]$item.total).ToString('0.00')
+          ([double]$item.total).ToString('0.##')
         ),
         $normal,
         $black,
@@ -797,7 +797,7 @@ $doc.add_PrintPage({
     $g.DrawString(
       (
         'Rs.' +
-        ([double]$script:r.subtotal).ToString('0.00')
+        ([double]$script:r.subtotal).ToString('0.##')
       ),
       $normal,
       $black,
@@ -821,7 +821,7 @@ $doc.add_PrintPage({
       $g.DrawString(
         (
           '- Rs.' +
-          ([double]$script:r.discount).ToString('0.00')
+          ([double]$script:r.discount).ToString('0.##')
         ),
         $normal,
         $black,
@@ -844,7 +844,7 @@ $doc.add_PrintPage({
     $g.DrawString(
       (
         'Rs.' +
-        ([double]$script:r.total).ToString('0.00')
+        ([double]$script:r.total).ToString('0.##')
       ),
       $bold,
       $black,
@@ -867,7 +867,7 @@ $doc.add_PrintPage({
       ),
       $head,
       $black,
-      [single]114,
+      [single]$centerX,
       [single]$y,
       $center
     )
@@ -887,8 +887,16 @@ $doc.add_PrintPage({
       $y += 15
     }
 
+    # Footer is printed before the QR, as in the Android receipt.
+    $g.DrawLine([System.Drawing.Pens]::Black, $left,$y,$right,$y)
+    $y += 7
+    $g.DrawString([string]$script:r.footer, $head, $black, [single]$centerX, [single]$y, $center)
+    $y += 16
+    $g.DrawString('Powered by Club Deal', $small, $black, [single]$centerX, [single]$y, $center)
+    $y += 22
+
     # --------------------------------
-    # UPI QR CODE
+    # UPI QR CODE — last main content
     # --------------------------------
 
     if ($script:r.qr) {
@@ -904,7 +912,7 @@ $doc.add_PrintPage({
         'SCAN TO PAY',
         $head,
         $black,
-        [single]114,
+        [single]$centerX,
         [single]$y,
         $center
       )
@@ -915,12 +923,14 @@ $doc.add_PrintPage({
         ('Amount: Rs.' + [string]$script:r.upiAmount),
         $bold,
         $black,
-        [single]114,
+        [single]$centerX,
         [single]$y,
         $center
       )
 
       $y += 10
+      $g.DrawString([string]$script:r.vpa, $small, $black, [single]$centerX, [single]$y, $center)
+      $y += 13
 
       # QR MATRIX
       $matrix = @($script:r.qr)
@@ -928,25 +938,19 @@ $doc.add_PrintPage({
       $count = $matrix.Count
 
       # QR size
-      $module = [Math]::Max(
-        2,
-        [Math]::Min(
-          4,
-          [Math]::Floor(132 / $count)
-        )
-      )
-
+      $module = [Math]::Max(1, [Math]::Min(4, [Math]::Floor(($contentWidth - 16) / ($count + 8))))
       $size = $count * $module
-
-      $qx = [single](($width - $size) / 2)
+      $quiet = 4 * $module
+      $totalQrSize = $size + (2 * $quiet)
+      $qx = [single]($centerX - ($totalQrSize / 2))
 
       # White QR background
       $g.FillRectangle(
         [System.Drawing.Brushes]::White,
-        $qx - 3,
-        [single]($y - 3),
-        [single]($size + 6),
-        [single]($size + 6)
+        $qx,
+        [single]$y,
+        [single]$totalQrSize,
+        [single]$totalQrSize
       )
 
       # Draw QR pixels
@@ -960,8 +964,8 @@ $doc.add_PrintPage({
 
             $g.FillRectangle(
               $black,
-              [single]($qx + $col * $module),
-              [single]($y + $row * $module),
+              [single]($qx + $quiet + $col * $module),
+              [single]($y + $quiet + $row * $module),
               [single]$module,
               [single]$module
             )
@@ -969,18 +973,7 @@ $doc.add_PrintPage({
         }
       }
 
-      $y += $size + 12
-
-      $g.DrawString(
-        ('UPI ID: ' + [string]$script:r.vpa),
-        $small,
-        $black,
-        [single]114,
-        [single]$y,
-        $center
-      )
-
-      $y += 16
+      $y += $totalQrSize + 8
 
     } else {
 
@@ -995,7 +988,7 @@ $doc.add_PrintPage({
         'UPI QR NOT AVAILABLE',
         $small,
         $black,
-        [single]114,
+        [single]$centerX,
         [single]$y,
         $center
       )
@@ -1003,36 +996,7 @@ $doc.add_PrintPage({
       $y += 16
     }
 
-    # --------------------------------
-    # FOOTER
-    # --------------------------------
 
-    $g.DrawLine(
-      [System.Drawing.Pens]::Black,
-      $left,$y,$right,$y
-    )
-
-    $y += 9
-
-    $g.DrawString(
-      [string]$script:r.footer,
-      $head,
-      $black,
-      [single]114,
-      [single]$y,
-      $center
-    )
-
-    $y += 16
-
-    $g.DrawString(
-      'Powered by Club Deal',
-      $small,
-      $black,
-      [single]114,
-      [single]$y,
-      $center
-    )
 
     $brand.Dispose()
     $head.Dispose()
@@ -1082,36 +1046,66 @@ Write-Output 'PRINT_SUBMITTED'
   // --------------------------------------------------
 
   Future<ProcessResult> _runPowerShell(String script) async {
-    final units = script.codeUnits;
+    // Order receipts can contain a large QR payload. Passing the complete
+    // script through -EncodedCommand can exceed Windows' process command-line
+    // length limit (32,767 characters). Write it to a short temporary .ps1
+    // file instead, and pass only that file path to powershell.exe.
+    final tempDir = await Directory.systemTemp.createTemp('clubdeal_ps_');
+    final scriptFile = File(
+      '${tempDir.path}${Platform.pathSeparator}print.ps1',
+    );
 
-    final bytes = Uint8List(units.length * 2);
+    try {
+      final units = script.codeUnits;
+      final bytes = Uint8List(2 + units.length * 2);
+      // UTF-16 little-endian BOM so Windows PowerShell 5.1 reads the script
+      // correctly, including any non-ASCII receipt text.
+      bytes[0] = 0xff;
+      bytes[1] = 0xfe;
 
-    for (var i = 0; i < units.length; i++) {
-      bytes[i * 2] = units[i] & 0xff;
+      for (var i = 0; i < units.length; i++) {
+        bytes[2 + i * 2] = units[i] & 0xff;
+        bytes[3 + i * 2] = (units[i] >> 8) & 0xff;
+      }
 
-      bytes[i * 2 + 1] = (units[i] >> 8) & 0xff;
-    }
+      await scriptFile.writeAsBytes(bytes, flush: true);
 
-    final result = await Process.run('powershell.exe', [
-      '-NoProfile',
-      '-NonInteractive',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-EncodedCommand',
-      base64Encode(bytes),
-    ], runInShell: false);
+      final args = [
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        scriptFile.path,
+      ];
 
-    if (result.exitCode != 0) {
-      throw ProcessException(
+      final result = await Process.run(
         'powershell.exe',
-        const [],
-        result.stderr.toString().trim().isEmpty
-            ? result.stdout.toString().trim()
-            : result.stderr.toString().trim(),
-        result.exitCode,
+        args,
+        runInShell: false,
       );
-    }
 
-    return result;
+      if (result.exitCode != 0) {
+        throw ProcessException(
+          'powershell.exe',
+          args,
+          result.stderr.toString().trim().isEmpty
+              ? result.stdout.toString().trim()
+              : result.stderr.toString().trim(),
+          result.exitCode,
+        );
+      }
+
+      return result;
+    } finally {
+      // Clean up the temporary script whether printing succeeds or fails.
+      try {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      } catch (_) {
+        // Do not mask the original printing result with a cleanup error.
+      }
+    }
   }
 }
