@@ -488,9 +488,17 @@ $doc.add_PrintPage({
 
   $g.PageUnit = [System.Drawing.GraphicsUnit]::Display
 
-  $width = 228
-  $left = 8
-  $right = 220
+  # Use the printer driver's real printable width, capped to a safe
+  # 58mm receipt column. POS-58 drivers often expose less than the nominal
+  # roll width; drawing to x=220 clips right-aligned prices and totals.
+  $clip = $g.VisibleClipBounds
+  $pageLeft = [Math]::Ceiling($clip.Left)
+  $width = [Math]::Min(190, [Math]::Floor($clip.Width))
+  if ($width -lt 120) { $width = 190 }
+  $left = $pageLeft + 3
+  $right = $pageLeft + $width - 3
+  $centerX = ($left + $right) / 2
+  $contentWidth = $right - $left
   $y = 8
 
   $center = New-Object System.Drawing.StringFormat
@@ -507,7 +515,7 @@ $doc.add_PrintPage({
 
     foreach ($line in $script:r.lines) {
       $lineText = [string]$line
-      $lineLayout = New-Object System.Drawing.RectangleF($left, $y, 212, 1000)
+      $lineLayout = New-Object System.Drawing.RectangleF($left, $y, $contentWidth, 1000)
       $lineMeasure = $g.MeasureString($lineText, $font, 212)
       $g.DrawString($lineText, $font, $black, $lineLayout)
       $y += [Math]::Max(15, [Math]::Ceiling($lineMeasure.Height) + 2)
@@ -545,7 +553,7 @@ $doc.add_PrintPage({
       [string]$script:r.restaurant,
       $brand,
       $black,
-      [single]114,
+      [single]$centerX,
       [single]$y,
       $center
     )
@@ -556,7 +564,7 @@ $doc.add_PrintPage({
       [string]$script:r.city,
       $head,
       $black,
-      [single]114,
+      [single]$centerX,
       [single]$y,
       $center
     )
@@ -567,7 +575,7 @@ $doc.add_PrintPage({
       [string]$script:r.address1,
       $normal,
       $black,
-      [single]114,
+      [single]$centerX,
       [single]$y,
       $center
     )
@@ -578,7 +586,7 @@ $doc.add_PrintPage({
       [string]$script:r.address2,
       $normal,
       $black,
-      [single]114,
+      [single]$centerX,
       [single]$y,
       $center
     )
@@ -589,7 +597,7 @@ $doc.add_PrintPage({
       [string]$script:r.email,
       $normal,
       $black,
-      [single]114,
+      [single]$centerX,
       [single]$y,
       $center
     )
@@ -600,7 +608,7 @@ $doc.add_PrintPage({
       [string]$script:r.phone1,
       $normal,
       $black,
-      [single]114,
+      [single]$centerX,
       [single]$y,
       $center
     )
@@ -611,7 +619,7 @@ $doc.add_PrintPage({
       [string]$script:r.phone2,
       $normal,
       $black,
-      [single]114,
+      [single]$centerX,
       [single]$y,
       $center
     )
@@ -633,7 +641,7 @@ $doc.add_PrintPage({
       'BILL / RECEIPT',
       $head,
       $black,
-      [single]114,
+      [single]$centerX,
       [single]$y,
       $center
     )
@@ -657,21 +665,21 @@ $doc.add_PrintPage({
       $left,
       $y
     )
+    $y += 14
 
     $g.DrawString(
       ('Time: ' + [string]$script:r.time),
       $normal,
       $black,
-      [single]$right,
-      [single]$y,
-      $rf
+      $left,
+      $y
     )
 
     $y += 15
 
     $customerText = 'Customer: ' + [string]$script:r.customer
-    $customerLayout = New-Object System.Drawing.RectangleF($left, $y, 212, 1000)
-    $customerMeasure = $g.MeasureString($customerText, $normal, 212)
+    $customerLayout = New-Object System.Drawing.RectangleF($left, $y, $contentWidth, 1000)
+    $customerMeasure = $g.MeasureString($customerText, $normal, $contentWidth)
     $g.DrawString($customerText, $normal, $black, $customerLayout)
     $y += [Math]::Max(14, [Math]::Ceiling($customerMeasure.Height) + 2)
 
@@ -735,8 +743,8 @@ $doc.add_PrintPage({
     foreach ($item in $script:r.items) {
 
       $itemName = [string]$item.name
-      $itemLayout = New-Object System.Drawing.RectangleF($left, $y, 212, 1000)
-      $itemMeasure = $g.MeasureString($itemName, $bold, 212)
+      $itemLayout = New-Object System.Drawing.RectangleF($left, $y, $contentWidth, 1000)
+      $itemMeasure = $g.MeasureString($itemName, $bold, $contentWidth)
       $g.DrawString($itemName, $bold, $black, $itemLayout)
       $y += [Math]::Max(13, [Math]::Ceiling($itemMeasure.Height) + 1)
 
@@ -744,7 +752,7 @@ $doc.add_PrintPage({
         (
           [string]$item.qty +
           ' x Rs.' +
-          ([double]$item.price).ToString('0.00')
+          ([double]$item.price).ToString('0.##')
         ),
         $small,
         $black,
@@ -755,7 +763,7 @@ $doc.add_PrintPage({
       $g.DrawString(
         (
           'Rs.' +
-          ([double]$item.total).ToString('0.00')
+          ([double]$item.total).ToString('0.##')
         ),
         $normal,
         $black,
@@ -789,7 +797,7 @@ $doc.add_PrintPage({
     $g.DrawString(
       (
         'Rs.' +
-        ([double]$script:r.subtotal).ToString('0.00')
+        ([double]$script:r.subtotal).ToString('0.##')
       ),
       $normal,
       $black,
@@ -813,7 +821,7 @@ $doc.add_PrintPage({
       $g.DrawString(
         (
           '- Rs.' +
-          ([double]$script:r.discount).ToString('0.00')
+          ([double]$script:r.discount).ToString('0.##')
         ),
         $normal,
         $black,
@@ -836,7 +844,7 @@ $doc.add_PrintPage({
     $g.DrawString(
       (
         'Rs.' +
-        ([double]$script:r.total).ToString('0.00')
+        ([double]$script:r.total).ToString('0.##')
       ),
       $bold,
       $black,
@@ -859,7 +867,7 @@ $doc.add_PrintPage({
       ),
       $head,
       $black,
-      [single]114,
+      [single]$centerX,
       [single]$y,
       $center
     )
@@ -882,9 +890,9 @@ $doc.add_PrintPage({
     # Footer is printed before the QR, as in the Android receipt.
     $g.DrawLine([System.Drawing.Pens]::Black, $left,$y,$right,$y)
     $y += 7
-    $g.DrawString([string]$script:r.footer, $head, $black, [single]114, [single]$y, $center)
+    $g.DrawString([string]$script:r.footer, $head, $black, [single]$centerX, [single]$y, $center)
     $y += 16
-    $g.DrawString('Powered by Club Deal', $small, $black, [single]114, [single]$y, $center)
+    $g.DrawString('Powered by Club Deal', $small, $black, [single]$centerX, [single]$y, $center)
     $y += 22
 
     # --------------------------------
@@ -904,7 +912,7 @@ $doc.add_PrintPage({
         'SCAN TO PAY',
         $head,
         $black,
-        [single]114,
+        [single]$centerX,
         [single]$y,
         $center
       )
@@ -915,13 +923,13 @@ $doc.add_PrintPage({
         ('Amount: Rs.' + [string]$script:r.upiAmount),
         $bold,
         $black,
-        [single]114,
+        [single]$centerX,
         [single]$y,
         $center
       )
 
       $y += 10
-      $g.DrawString([string]$script:r.vpa, $small, $black, [single]114, [single]$y, $center)
+      $g.DrawString([string]$script:r.vpa, $small, $black, [single]$centerX, [single]$y, $center)
       $y += 13
 
       # QR MATRIX
@@ -930,11 +938,11 @@ $doc.add_PrintPage({
       $count = $matrix.Count
 
       # QR size
-      $module = [Math]::Max(2, [Math]::Min(4, [Math]::Floor(168 / $count)))
+      $module = [Math]::Max(1, [Math]::Min(4, [Math]::Floor(($contentWidth - 16) / ($count + 8))))
       $size = $count * $module
       $quiet = 4 * $module
       $totalQrSize = $size + (2 * $quiet)
-      $qx = [single](($width - $totalQrSize) / 2)
+      $qx = [single]($centerX - ($totalQrSize / 2))
 
       # White QR background
       $g.FillRectangle(
@@ -980,7 +988,7 @@ $doc.add_PrintPage({
         'UPI QR NOT AVAILABLE',
         $small,
         $black,
-        [single]114,
+        [single]$centerX,
         [single]$y,
         $center
       )
