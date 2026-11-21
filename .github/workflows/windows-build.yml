@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/restaurant-operations
+      - feat/final004-thermal-receipt-layout
   workflow_dispatch:
 
 jobs:
