@@ -392,7 +392,7 @@ class SettingsPage extends StatelessWidget {
                                     }
                                   },
                             icon: const Icon(Icons.display_settings, size: 17),
-                            label: const Text('Send VFD Test'),
+                            label: Text(display.protocol == CustomerDisplayProtocol.zktecoLed8Digit ? 'Send LED Test' : 'Send VFD Test'),
                           ),
                           StatusPill(
                             text: display.busy ? 'WORKING' : display.status.toUpperCase(),
