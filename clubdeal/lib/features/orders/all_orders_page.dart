@@ -5,6 +5,7 @@ import '../../core/bloc/order_bloc.dart';
 import '../../core/bloc/menu_bloc.dart';
 import '../../core/models/order_model.dart';
 import '../../core/services/printer_service.dart';
+import '../../core/services/customer_display_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/desktop_widgets.dart';
 
@@ -129,13 +130,19 @@ class _AllOrdersPageState extends State<AllOrdersPage> {
                               decoration: const InputDecoration(
                                 labelText: 'Table',
                               ),
-                              items: List.generate(5, (i) {
-                                final value = 'A${i + 1}';
-                                return DropdownMenuItem(
-                                  value: value,
-                                  child: Text(value),
-                                );
-                              }),
+                              items: [
+                                ...List.generate(5, (i) {
+                                  final value = 'A${i + 1}';
+                                  return DropdownMenuItem(
+                                    value: value,
+                                    child: Text(value),
+                                  );
+                                }),
+                                const DropdownMenuItem<String>(
+                                  value: 'Parcel',
+                                  child: Text('Parcel'),
+                                ),
+                              ],
                               onChanged: (value) {
                                 if (value != null) tableController.text = value;
                               },
@@ -331,9 +338,18 @@ class _HistoryRowState extends State<_HistoryRow> {
     setState(() => printing = true);
     try {
       await context.read<PrinterService>().printOrder(widget.order);
+      var message = 'Bill sent to printer.';
+      try {
+        await context
+            .read<CustomerDisplayService>()
+            .showPrintedTotal(widget.order.total);
+        message = 'Bill printed. Customer display update command sent.';
+      } catch (displayError) {
+        message = 'Bill printed, but customer display update failed: $displayError';
+      }
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Bill sent to printer.')));
+          .showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)

@@ -6,6 +6,7 @@ import '../../core/bloc/order_bloc.dart';
 import '../../core/bloc/menu_bloc.dart';
 import '../../core/models/order_model.dart';
 import '../../core/services/printer_service.dart';
+import '../../core/services/customer_display_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/desktop_widgets.dart';
 
@@ -23,10 +24,18 @@ class _OrderTileState extends State<OrderTile> {
     setState(() => printing = true);
     try {
       await context.read<PrinterService>().printOrder(widget.order);
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Bill sent to printer.')));
+      String message = 'Bill sent to printer.';
+      try {
+        await context.read<CustomerDisplayService>().showPrintedTotal(widget.order.total);
+        message = 'Bill printed. Customer display total updated.';
+      } catch (displayError) {
+        message = 'Bill printed. Customer display update failed: $displayError';
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+      }
     } catch (e) {
       if (mounted)
         ScaffoldMessenger.of(context)
@@ -96,10 +105,18 @@ class _OrderTileState extends State<OrderTile> {
           widget.order,
           paymentMethod: selected,
         );
-        if (mounted)
+        var message = 'Payment saved and bill printed.';
+        try {
+          await context.read<CustomerDisplayService>().showPrintedTotal(widget.order.total);
+          message = 'Payment saved, bill printed, and display total updated.';
+        } catch (displayError) {
+          message = 'Payment saved and bill printed, but display update failed: $displayError';
+        }
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Payment saved and bill printed.')),
+            SnackBar(content: Text(message)),
           );
+        }
       } catch (e) {
         if (mounted)
           ScaffoldMessenger.of(context).showSnackBar(
@@ -372,7 +389,19 @@ class _OrderTileState extends State<OrderTile> {
         children: [
           InkWell(
             borderRadius: BorderRadius.circular(9),
-            onTap: () => setState(() => expanded = !expanded),
+            onTap: () {
+              final opening = !expanded;
+              setState(() => expanded = opening);
+              if (opening) {
+                // The desktop app receives saved orders rather than a live
+                // checkout cart; show the selected order on the customer VFD.
+                context.read<CustomerDisplayService>().showOrder(widget.order)
+                    .catchError((Object _) {});
+              } else {
+                context.read<CustomerDisplayService>().clearDisplay()
+                    .catchError((Object _) {});
+              }
+            },
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: Row(

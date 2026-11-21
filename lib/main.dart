@@ -14,6 +14,7 @@ import 'core/repositories/expense_repository.dart';
 import 'core/repositories/restaurant_repository.dart';
 import 'core/services/alert_sound_service.dart';
 import 'core/services/printer_service.dart';
+import 'core/services/customer_display_service.dart';
 import 'features/app/desktop_shell.dart';
 import 'features/theme/app_theme.dart';
 
@@ -29,6 +30,7 @@ Future<void> main() async {
         RepositoryProvider.value(value: expenseRepository),
         RepositoryProvider(create: (_) => AlertSoundService()),
         RepositoryProvider(create: (_) => PrinterService()),
+        RepositoryProvider(create: (_) => CustomerDisplayService()),
       ],
       child: MultiBlocProvider(
         providers: [
@@ -45,10 +47,9 @@ Future<void> main() async {
                 MenuBloc(restaurantRepository)..add(const MenuStarted()),
           ),
           BlocProvider(
-            create: (_) => ExpenseBloc(expenseRepository)
-              ..add(
-                WatchExpenses(DateTime(2000, 1, 1)),
-              ),
+            create: (_) =>
+                ExpenseBloc(expenseRepository)
+                  ..add(WatchExpenses(DateTime(2000, 1, 1))),
           ),
           BlocProvider(
             create: (context) =>
@@ -56,7 +57,9 @@ Future<void> main() async {
                   ..add(const SettingsStarted()),
           ),
           BlocProvider(
-            create: (_) => StockBloc(repository: FirestoreStockRepository(FirebaseFirestore.instance)),
+            create: (_) => StockBloc(
+              repository: FirestoreStockRepository(FirebaseFirestore.instance),
+            ),
           ),
         ],
         child: const ClubDealDesktopApp(),
