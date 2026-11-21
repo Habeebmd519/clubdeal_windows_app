@@ -7,7 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/order_model.dart';
 
-enum CustomerDisplayProtocol { escPos, cd5220 }
+enum CustomerDisplayProtocol { zktecoLed8Digit, escPos, cd5220 }
 
 class CustomerDisplayService extends ChangeNotifier {
   CustomerDisplayService() { _initialize(); }
@@ -21,7 +21,7 @@ class CustomerDisplayService extends ChangeNotifier {
   bool busy = false;
   String selectedPort = 'COM1';
   int baudRate = 9600;
-  CustomerDisplayProtocol protocol = CustomerDisplayProtocol.cd5220;
+  CustomerDisplayProtocol protocol = CustomerDisplayProtocol.zktecoLed8Digit;
   List<String> ports = const [];
   String? lastError;
   String status = 'Not configured';
@@ -32,10 +32,18 @@ class CustomerDisplayService extends ChangeNotifier {
       enabled = prefs.getBool(_enabledKey) ?? false;
       selectedPort = prefs.getString(_portKey) ?? 'COM1';
       baudRate = prefs.getInt(_baudKey) ?? 9600;
-      protocol = CustomerDisplayProtocol.values.firstWhere(
-        (value) => value.name == prefs.getString(_protocolKey),
-        orElse: () => CustomerDisplayProtocol.cd5220,
-      );
+      final savedProtocol = prefs.getString(_protocolKey);
+      // Migrate the former CD5220 default to numeric mode for this terminal's
+      // built-in 8-character LED. Preserve an explicitly selected ESC/POS mode.
+      protocol = savedProtocol == null || savedProtocol == 'cd5220'
+          ? CustomerDisplayProtocol.zktecoLed8Digit
+          : CustomerDisplayProtocol.values.firstWhere(
+              (value) => value.name == savedProtocol,
+              orElse: () => CustomerDisplayProtocol.zktecoLed8Digit,
+            );
+      if (savedProtocol == null || savedProtocol == 'cd5220') {
+        await prefs.setString(_protocolKey, protocol.name);
+      }
     } catch (_) {}
     await refreshPorts();
     notifyListeners();
@@ -106,9 +114,33 @@ ConvertTo-Json -InputObject $names -Compress
   }
 
   Future<void> testDisplay() async {
-    await _showLines('CLUB DEAL', 'DISPLAY TEST OK');
+    if (protocol == CustomerDisplayProtocol.zktecoLed8Digit) {
+      // Minimal raw numeric probe for the built-in 8-character LED.
+      // ZKTeco does not publish this controller's serial frame specification.
+      await _sendBytes(ascii.encode('12345678'));
+    } else {
+      await _showLines('CLUB DEAL', 'DISPLAY TEST OK');
+    }
     status = 'Test data sent';
     notifyListeners();
+  }
+
+  /// Called after the customer receipt has been successfully queued.
+  Future<void> showPrintedTotal(double total) async {
+    if (!enabled) return;
+    if (!total.isFinite || total < 0) {
+      throw ArgumentError.value(total, 'total', 'Must be a valid non-negative amount.');
+    }
+    if (protocol == CustomerDisplayProtocol.zktecoLed8Digit) {
+      var value = total.toStringAsFixed(2);
+      if (value.length > 8) value = total.toStringAsFixed(0);
+      if (value.length > 8) {
+        throw RangeError('Amount \${total.toStringAsFixed(2)} does not fit the 8-character LED display.');
+      }
+      await _sendBytes(ascii.encode(value.padLeft(8)));
+    } else {
+      await _showLines('CLUB DEAL', 'TOTAL Rs \${total.toStringAsFixed(2)}');
+    }
   }
 
   Future<void> showOrder(RestaurantOrder order) async {
@@ -128,14 +160,20 @@ ConvertTo-Json -InputObject $names -Compress
 
   Future<void> clearDisplay() async {
     if (!enabled) return;
-    await _sendBytes(const <int>[0x0C]);
+    if (protocol == CustomerDisplayProtocol.zktecoLed8Digit) {
+      await _sendBytes(ascii.encode('        '));
+    } else {
+      await _sendBytes(const <int>[0x0C]);
+    }
   }
 
   Future<void> _showLines(String first, String second) async {
     final line1 = _fitAscii(first, 20);
     final line2 = _fitAscii(second, 20);
     final bytes = <int>[];
-    if (protocol == CustomerDisplayProtocol.escPos) {
+    if (protocol == CustomerDisplayProtocol.zktecoLed8Digit) {
+      throw StateError('The built-in LED supports numeric totals only.');
+    } else if (protocol == CustomerDisplayProtocol.escPos) {
       bytes.addAll([0x1B, 0x40, 0x0C]);
       bytes.addAll(ascii.encode(line1));
       bytes.addAll([0x0D, 0x0A]);
