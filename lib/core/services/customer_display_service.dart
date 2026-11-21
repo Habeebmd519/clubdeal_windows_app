@@ -115,9 +115,10 @@ ConvertTo-Json -InputObject $names -Compress
 
   Future<void> testDisplay() async {
     if (protocol == CustomerDisplayProtocol.zktecoLed8Digit) {
-      // Minimal raw numeric probe for the built-in 8-character LED.
-      // ZKTeco does not publish this controller's serial frame specification.
-      await _sendBytes(ascii.encode('12345678'));
+      // Send a realistic 8-character amount pattern to the built-in LED.
+      // This confirms the selected COM port and numeric data path; it does
+      // not claim to identify ZKTeco's unpublished controller framing.
+      await _sendBytes(ascii.encode('00123.45'));
     } else {
       await _showLines('CLUB DEAL', 'DISPLAY TEST OK');
     }
@@ -137,7 +138,10 @@ ConvertTo-Json -InputObject $names -Compress
       if (value.length > 8) {
         throw RangeError('Amount ${total.toStringAsFixed(2)} does not fit the 8-character LED display.');
       }
-      await _sendBytes(ascii.encode(value.padLeft(8)));
+      // Use leading zeroes rather than spaces: simple 8-digit LED
+      // controllers often do not render leading ASCII spaces consistently.
+      final displayValue = value.padLeft(8, '0');
+      await _sendBytes(ascii.encode(displayValue));
     } else {
       await _showLines('CLUB DEAL', 'TOTAL Rs ${total.toStringAsFixed(2)}');
     }
@@ -231,15 +235,21 @@ $serial = [System.IO.Ports.SerialPort]::new(
   [System.IO.Ports.StopBits]::One
 )
 $serial.Handshake = [System.IO.Ports.Handshake]::None
+$serial.DtrEnable = $true
+$serial.RtsEnable = $true
 $serial.ReadTimeout = 500
-$serial.WriteTimeout = 1500
+$serial.WriteTimeout = 3000
 try {
   $serial.Open()
+  $serial.DiscardInBuffer()
+  $serial.DiscardOutBuffer()
   if ($data.Length -gt 0) {
     $serial.Write($data, 0, $data.Length)
     $serial.BaseStream.Flush()
   }
-  Start-Sleep -Milliseconds 100
+  # Give the terminal's integrated serial display controller time to latch
+  # the complete frame before closing the COM port.
+  Start-Sleep -Milliseconds 300
   Write-Output 'CUSTOMER_DISPLAY_OK'
 } finally {
   if ($serial.IsOpen) { $serial.Close() }
@@ -252,7 +262,7 @@ try {
       await _runPowerShell(script);
       status = openOnly ? 'Serial port opened successfully' : 'Display data sent';
     } catch (error) {
-      lastError = '$error';
+      lastError = error.toString();
       status = 'Display operation failed';
       rethrow;
     } finally {
