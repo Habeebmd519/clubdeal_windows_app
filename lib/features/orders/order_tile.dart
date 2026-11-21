@@ -385,6 +385,9 @@ class _OrderTileState extends State<OrderTile> {
                 // checkout cart; show the selected order on the customer VFD.
                 context.read<CustomerDisplayService>().showOrder(widget.order)
                     .catchError((Object _) {});
+              } else {
+                context.read<CustomerDisplayService>().clearDisplay()
+                    .catchError((Object _) {});
               }
             },
             child: Padding(
