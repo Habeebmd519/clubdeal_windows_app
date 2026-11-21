@@ -5,6 +5,7 @@ import '../../core/bloc/order_bloc.dart';
 import '../../core/bloc/menu_bloc.dart';
 import '../../core/models/order_model.dart';
 import '../../core/services/printer_service.dart';
+import '../../core/services/customer_display_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/desktop_widgets.dart';
 
