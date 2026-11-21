@@ -5,6 +5,7 @@ on:
     branches:
       - feature/restaurant-operations
       - feat/final004-thermal-receipt-layout
+      - feat/zkteco-customer-display
   workflow_dispatch:
 
 jobs:
