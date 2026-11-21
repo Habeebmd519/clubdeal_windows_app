@@ -24,10 +24,18 @@ class _OrderTileState extends State<OrderTile> {
     setState(() => printing = true);
     try {
       await context.read<PrinterService>().printOrder(widget.order);
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Bill sent to printer.')));
+      String message = 'Bill sent to printer.';
+      try {
+        await context.read<CustomerDisplayService>().showPrintedTotal(widget.order.total);
+        message = 'Bill printed. Customer display total updated.';
+      } catch (displayError) {
+        message = 'Bill printed. Customer display update failed: $displayError';
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+      }
     } catch (e) {
       if (mounted)
         ScaffoldMessenger.of(context)
@@ -85,10 +93,6 @@ class _OrderTileState extends State<OrderTile> {
           widget.order.id,
           selected,
         );
-        // Customer-display errors must never block a saved payment.
-        try {
-          await context.read<CustomerDisplayService>().showPayment(widget.order.total);
-        } catch (_) {}
       } catch (e) {
         if (mounted)
           ScaffoldMessenger.of(context).showSnackBar(
@@ -101,10 +105,18 @@ class _OrderTileState extends State<OrderTile> {
           widget.order,
           paymentMethod: selected,
         );
-        if (mounted)
+        var message = 'Payment saved and bill printed.';
+        try {
+          await context.read<CustomerDisplayService>().showPrintedTotal(widget.order.total);
+          message = 'Payment saved, bill printed, and display total updated.';
+        } catch (displayError) {
+          message = 'Payment saved and bill printed, but display update failed: $displayError';
+        }
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Payment saved and bill printed.')),
+            SnackBar(content: Text(message)),
           );
+        }
       } catch (e) {
         if (mounted)
           ScaffoldMessenger.of(context).showSnackBar(
