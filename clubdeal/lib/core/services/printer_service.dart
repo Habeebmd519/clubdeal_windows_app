@@ -471,6 +471,10 @@ if ($r.items) {
   }
 }
 
+# Extra tail feed so the QR code and final line clear the printer outlet.
+# PaperSize is in hundredths of an inch; 100 adds about 25 mm of blank paper.
+$height += 100
+
 $doc.DefaultPageSettings.PaperSize =
   New-Object System.Drawing.Printing.PaperSize(
     'ClubDeal58mm',
