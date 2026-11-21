@@ -135,16 +135,20 @@ ConvertTo-Json -InputObject $names -Compress
       var value = total.toStringAsFixed(2);
       if (value.length > 8) value = total.toStringAsFixed(0);
       if (value.length > 8) {
-        throw RangeError('Amount \${total.toStringAsFixed(2)} does not fit the 8-character LED display.');
+        throw RangeError('Amount ${total.toStringAsFixed(2)} does not fit the 8-character LED display.');
       }
       await _sendBytes(ascii.encode(value.padLeft(8)));
     } else {
-      await _showLines('CLUB DEAL', 'TOTAL Rs \${total.toStringAsFixed(2)}');
+      await _showLines('CLUB DEAL', 'TOTAL Rs ${total.toStringAsFixed(2)}');
     }
   }
 
   Future<void> showOrder(RestaurantOrder order) async {
     if (!enabled) return;
+    if (protocol == CustomerDisplayProtocol.zktecoLed8Digit) {
+      await showPrintedTotal(order.total);
+      return;
+    }
     final item = order.items.isEmpty ? null : order.items.last;
     final first = item == null
         ? 'ORDER ${order.id}'
@@ -153,10 +157,7 @@ ConvertTo-Json -InputObject $names -Compress
     await _showLines(first, second);
   }
 
-  Future<void> showPayment(double total) async {
-    if (!enabled) return;
-    await _showLines('PAYMENT RECEIVED', 'TOTAL Rs ${total.toStringAsFixed(0)}');
-  }
+  Future<void> showPayment(double total) => showPrintedTotal(total);
 
   Future<void> clearDisplay() async {
     if (!enabled) return;
