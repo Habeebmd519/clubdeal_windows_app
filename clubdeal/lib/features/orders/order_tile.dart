@@ -6,6 +6,7 @@ import '../../core/bloc/order_bloc.dart';
 import '../../core/bloc/menu_bloc.dart';
 import '../../core/models/order_model.dart';
 import '../../core/services/printer_service.dart';
+import '../../core/services/customer_display_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/desktop_widgets.dart';
 
@@ -84,6 +85,10 @@ class _OrderTileState extends State<OrderTile> {
           widget.order.id,
           selected,
         );
+        // Customer-display errors must never block a saved payment.
+        try {
+          await context.read<CustomerDisplayService>().showPayment(widget.order.total);
+        } catch (_) {}
       } catch (e) {
         if (mounted)
           ScaffoldMessenger.of(context).showSnackBar(
@@ -372,7 +377,16 @@ class _OrderTileState extends State<OrderTile> {
         children: [
           InkWell(
             borderRadius: BorderRadius.circular(9),
-            onTap: () => setState(() => expanded = !expanded),
+            onTap: () {
+              final opening = !expanded;
+              setState(() => expanded = opening);
+              if (opening) {
+                // The desktop app receives saved orders rather than a live
+                // checkout cart; show the selected order on the customer VFD.
+                context.read<CustomerDisplayService>().showOrder(widget.order)
+                    .catchError((Object _) {});
+              }
+            },
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: Row(
